@@ -32,7 +32,7 @@ _SECRETS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ("credential-assignment",
      re.compile(r"(?i)\b(password|passwd|pwd|secret|client[_-]?secret|api[_-]?key|"
                 r"(?:access|auth|refresh|bearer)?[_-]?token)"
-                r"(\s*[:=]\s*)(['\"]?)[^\s'\",;]{4,}\3"),
+                r"(\s*[:=]\s*)(['\"]?)[^\s'\",;`]{4,}\3"),
      r"\1\2[REDACTED]"),
     ("cookie", re.compile(r"(?im)^(\s*(?:set-)?cookie\s*:\s*)[^\r\n]+"), r"\1[REDACTED]"),
 )
@@ -54,10 +54,14 @@ def detect_secrets(text: str) -> tuple[str, ...]:
 
 _PII: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("email", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
-    ("phone", re.compile(r"(?<![\w.])\+?\d[\d\s().-]{8,}\d(?![\w.])")),
+    # Real phone shapes only: an international "+" prefix, or North American grouping.
+    # Bare digit runs are not matched - hex constants, offsets and hashes look like them.
+    ("phone", re.compile(r"(?<![\w+])(?:\+\d{1,3}[\s.-]?(?:\(?\d{1,4}\)?[\s.-]?){1,4}\d{3,4}"
+                         r"|\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b)(?![\w])")),
     ("national-id", re.compile(r"\b[STFGM]\d{7}[A-Z]\b|\b\d{3}-\d{2}-\d{4}\b")),
     ("date-of-birth", re.compile(r"(?i)\b(dob|date of birth)\s*[:=]?\s*\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}")),
-    ("medical-record", re.compile(r"(?i)\b(mrn|medical record( number)?|patient id)\s*[:#=]?\s*\w{4,}")),
+    ("medical-record", re.compile(r"(?i)\b(mrn|medical record( number)?|patient id)\s*[:#=]?\s*"
+                                  r"(?=\w*\d)\w{4,}")),  # identifiers contain digits
 )
 
 
@@ -138,6 +142,7 @@ _GDB: tuple[_Rule, ...] = (
      "host access, file write or script execution"),
 )
 COMMAND_RULES: dict[str, tuple[_Rule, ...]] = {
+    "rizin": _COMMON + _RIZIN_WRITE + _RIZIN_EXEC,  # local engine run by RESI itself
     "execute_rizin_command": _COMMON + _RIZIN_WRITE + _RIZIN_EXEC,
     "cutter_command": _COMMON + _RIZIN_WRITE + _RIZIN_EXEC,
     # debug sessions are already approval-gated: stepping is allowed, writes are not

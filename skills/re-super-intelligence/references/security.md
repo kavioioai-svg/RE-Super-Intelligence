@@ -38,6 +38,12 @@ Unknown tools from other MCP servers default to `D`.
 
 Recording an agent-made call (`resi_record_execution`) re-runs the scope and command checks: an unapproved call cannot be laundered in as evidence.
 
+Targets given as file paths resolve to the file's SHA-256 before any check, so plans and guardrails always judge the same identity.
+
+**Local engines** (`cli.rizin`) and built-in tools run only against the authorized artifact file: RESI substitutes the path from the artifact record (any agent-supplied path is discarded), re-hashes the file immediately before running (a modified file is refused), runs the program without a shell, with `-N` to ignore user configuration, read-only, under a timeout.
+
+Detectors are tuned for reverse engineering: hex constants, offsets and hashes are not mistaken for phone numbers, and documentation that names a pattern (for example a backticked `password=`) is not mistaken for a secret.
+
 ## Security Auditor (`resi_security_audit`)
 
 Re-derives every verdict from stored records instead of trusting the execution path, so a bypassed or buggy guardrail shows up.

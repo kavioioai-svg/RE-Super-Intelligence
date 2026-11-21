@@ -252,6 +252,8 @@ class PlanStep:
     substituted_for: str | None = None
     learned_score: float | None = None
     rationale: str = ""
+    allowed: bool = True  # the guardrail's verdict for this step, right now
+    gate: str = ""  # why: the same reason Scope.check gives at execution time
 
 
 @dataclass(frozen=True, slots=True)
@@ -265,6 +267,8 @@ class ResearchPlan:
     needs_approval: tuple[str, ...] = ()
     rules: tuple[str, ...] = ()
     authorized: bool = True
+    target: str = ""  # pass exactly this as `target` when executing or recording steps
+    recommended: tuple[str, ...] = ()  # optional tools that would strengthen this plan
 
 
 # --- memory ----------------------------------------------------------------------

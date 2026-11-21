@@ -10,7 +10,8 @@
 2. Locate candidates from strings, imports and names before decompiling anything.
 3. Decompile narrowly — one function or a small set. Use `batch_decompile` only for small batches (it is the most common timeout).
 4. Record every call with `resi_record_execution`; every finding with `resi_record_claim`, citing the execution id and a `subject`.
-5. Corroborate key claims with an independent view: pseudo-code vs raw assembly, or a second backend.
+5. Corroborate key claims with an independent engine: `resi_run_local` with `cli.rizin` (`ij`, `iSj`, `iij`, `izj`, `aaa;aflj`, `pdfj @ <fn>`), recorded automatically. Claim it under the same `subject` so the validator can promote it.
+5a. Identify algorithms by their constants (`references/playbooks.md`) before naming them.
 6. For free-form `execute_rizin_command`, use analysis commands only (`aaa`, `afl`, `pdf`, `pdc`, `iz`, `axt`); the command filter rejects anything else.
 
 ## Claim discipline

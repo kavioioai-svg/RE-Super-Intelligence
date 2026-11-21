@@ -6,7 +6,7 @@ be read as an established fact.
 
 from __future__ import annotations
 
-from ..domain.enums import ClaimKind, HypothesisStatus, Verification
+from ..domain.enums import ClaimKind, ExecutionStatus, HypothesisStatus, Verification
 from ..domain.models import Claim
 from .ports import EvidenceRepository
 from .projects import ProjectService
@@ -46,7 +46,8 @@ class ReportService:
             (f"- Executions: {len(executions)} "
              f"({sum(1 for e in executions if e.succeeded)} succeeded, "
              f"{sum(1 for e in executions if e.status.value == 'rejected')} rejected by guardrails)"),
-            f"- Claims: {len(claims)}; hypotheses: {len(hypotheses)}",
+            (f"- Claims: {len(claims)} ({sum(1 for c in claims if c.kind is ClaimKind.HYPOTHESIS)} "
+             f"hypotheses); hypothesis register: {len(hypotheses)}"),
             "",
         ]
         header = [
@@ -58,6 +59,15 @@ class ReportService:
             lines += [f"## {title}", ""]
             lines += [*header, *map(_row, section)] if section else ["_None recorded._"]
             lines.append("")
+        failures = [e for e in executions if e.status in (ExecutionStatus.ERROR, ExecutionStatus.TIMEOUT)]
+        lines += ["## Tool failures", ""]
+        if failures:
+            lines += ["| Execution | Tool | Status | Error |", "|---|---|---|---|"]
+            lines += [f"| {e.execution_id} | {e.tool_id} | {e.status.value} | "
+                      f"{e.error.replace('|', '/')[:160]} |" for e in failures]
+        else:
+            lines.append("_None._")
+        lines.append("")
         lines += ["## Hypothesis register", ""]
         if hypotheses:
             lines += ["| Hypothesis | Statement | Falsified if | Status |", "|---|---|---|---|"]
@@ -68,10 +78,16 @@ class ReportService:
         open_items = [h for h in hypotheses if h.status in (HypothesisStatus.OPEN,
                                                             HypothesisStatus.SUPPORTED)]
         downgraded = [c for c in claims if c.verification is Verification.DOWNGRADED]
+        untested = [c for c in claims
+                    if c.kind is ClaimKind.HYPOTHESIS and c.verification is not Verification.DOWNGRADED]
         lines += ["", "## Unresolved questions", ""]
         lines += [f"- {h.statement} ({h.status.value})" for h in open_items]
+        lines += [f"- Untested hypothesis {c.claim_id}: {c.interpretation or c.observation}"
+                  for c in untested]
         lines += [f"- Downgraded claim {c.claim_id}: {c.limitations}" for c in downgraded]
-        if not open_items and not downgraded:
+        lines += [f"- {e.tool_id} failed ({e.execution_id}); results it would provide are missing"
+                  for e in failures]
+        if not (open_items or untested or downgraded or failures):
             lines.append("_None._")
         lines += ["", "## Reproduction", ""]
         lines += [f"- {c.claim_id}: {c.reproduction}" for c in claims if c.reproduction] or ["_None._"]

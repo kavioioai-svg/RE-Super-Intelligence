@@ -15,7 +15,8 @@
    - Is a decompiler's guess being stated as behaviour?
    - Would a different explanation fit the same evidence? If yes, the claim is a hypothesis.
    - Is the confidence earned? Check `resi_learning_report` — if the agent is flagged overconfident at a level, lower it.
-4. Request corroboration for any high-impact claim backed by a single tool.
+4. Request corroboration for any high-impact claim backed by a single tool: a second engine (`resi_run_local` with `cli.rizin`), a test vector, or a runtime experiment.
+5. After a tool's first successful, correct run, mark it verified with `resi_verify_tool` citing that execution.
 
 ## Never
 Delete claims, upgrade a claim without new evidence, or accept "the tool said so" for behaviour that was never observed.

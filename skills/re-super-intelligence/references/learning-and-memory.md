@@ -41,6 +41,17 @@ Documents: `finding` (validated claims, ingested automatically), `lesson`, `note
 | Personal data, medical profile | **Blocked** — not stored at all |
 | Personal data, other profiles | Quarantined |
 
+## Playbooks
+
+`resi_import_playbooks` (CLI: `resi playbooks import`) turns Markdown procedures into memory: RESI's own `references/playbooks.md`, the REA skill, your team's runbooks. Each heading becomes a section titled with its heading path and keyed by file and anchor, so re-importing updates in place and every recalled section shows where it came from. Imported text passes the same admission control as any memory.
+
+```text
+resi_import_playbooks {"paths": ["~/.agents/skills/re-super-intelligence",
+                                 "~/.agents/skills/reverse-engineer-anything"]}
+```
+
+Re-import after a skill updates. This is how RESI gains other skills' knowledge without copying them.
+
 ## RAG retrieval
 
 `resi_recall` runs BM25 over title (weighted), text and tags; when an embedder is configured it also runs cosine similarity over stored vectors and fuses both rankings with reciprocal rank fusion. The default embedder is a dependency-free feature-hashing model (unigrams + bigrams); any neural embedder can replace it by implementing the `Embedder` port.

@@ -10,14 +10,27 @@ host agent made the call through its own MCP client and records it here:
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
+from ..domain.catalog import LOCAL_ENGINES
 from ..domain.enums import ExecutionStatus
-from ..domain.errors import AuthorizationDenied, CommandRejected, ResiError, ToolNotCallable
+from ..domain.errors import (
+    AuthorizationDenied,
+    CommandRejected,
+    NotFound,
+    ResiError,
+    ToolNotCallable,
+)
 from ..domain.guardrails import check_command, guard_output, is_freeform_command_tool
 from ..domain.hashing import stable_digest
-from ..domain.models import Decision, Episode, ExecutionRecord, ExecutionRequest, ToolDescriptor
+from ..domain.models import (
+    Decision,
+    Episode,
+    ExecutionRecord,
+    ExecutionRequest,
+    ToolDescriptor,
+)
 from ..domain.registry import CapabilityRegistry
 from .ports import (
     AuditLog,
@@ -32,7 +45,10 @@ from .registry_service import RegistryService
 
 
 class TransportUnavailable(ResiError):
-    """No transport is configured; use ``record_external`` for agent-made calls."""
+    """RESI cannot run this tool itself; the agent calls it and uses ``record_external``."""
+
+
+LOCAL_ENVIRONMENTS = ("builtin", "cli")
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +78,7 @@ class ToolExecutionService:
 
     def check(self, project_id: str, request: ExecutionRequest) -> SecurityCheck:
         """Would this call be allowed? Lets any agent ask before acting."""
+        request, _ = self._normalise(request, None)
         try:
             tool, decision = self._authorize(self._registry.current(), project_id, request)
         except (ToolNotCallable, AuthorizationDenied, CommandRejected) as exc:
@@ -73,12 +90,20 @@ class ToolExecutionService:
     def execute(self, project_id: str, request: ExecutionRequest,
                 artifact_id: str | None = None) -> ExecutionRecord:
         started, t0 = self._clock.now(), self._clock.monotonic_ms()
+        request, artifact_id = self._normalise(request, artifact_id)
         try:
             tool, decision = self._authorize(self._registry.current(), project_id, request)
         except (ToolNotCallable, AuthorizationDenied, CommandRejected) as exc:
             return self._reject(project_id, request, artifact_id, started, str(exc))
-        if self._transport is None:
-            raise TransportUnavailable("no transport configured; use record_external()")
+        if self._transport is None or not self._transport.supports(tool.id):
+            raise TransportUnavailable(
+                f"RESI cannot run {tool.id} itself: call it through your agent's MCP client, "
+                "then record it with resi_record_execution")
+        try:
+            args = self._local_args(tool, request, artifact_id)
+        except AuthorizationDenied as exc:
+            return self._reject(project_id, request, artifact_id, started, str(exc))
+        request = replace(request, args=args)
 
         status, raw, error, attempts = ExecutionStatus.ERROR, None, "", 0
         max_attempts = 2 if tool.security_class.retryable else 1
@@ -102,6 +127,7 @@ class ToolExecutionService:
         """Record a call the host agent made itself. Guardrails still apply: an
         out-of-scope or unapproved call is recorded as rejected and audited."""
         started = self._clock.now()
+        request, artifact_id = self._normalise(request, artifact_id)
         try:
             tool, decision = self._authorize(self._registry.current(), project_id, request)
         except (ToolNotCallable, AuthorizationDenied, CommandRejected) as exc:
@@ -110,6 +136,27 @@ class ToolExecutionService:
         status = ExecutionStatus.OK if succeeded else ExecutionStatus.ERROR
         return self._complete(project_id, request, artifact_id, tool, decision, started,
                               latency_ms, status, raw_output if succeeded else None, error, 1)
+
+    def verify_tool(self, execution_id: str, version: str = "") -> ToolDescriptor:
+        """Promote a tool to ``verified`` using one of its own successful executions on an
+        authorized target. Evidence, not assertion: there is no other way in."""
+        record = self._evidence.get_execution(execution_id)
+        if record is None:
+            raise NotFound(f"execution {execution_id}")
+        if not record.succeeded:
+            raise ToolNotCallable(f"{execution_id} did not succeed ({record.status.value}); "
+                                  "a tool is verified only by a successful run")
+        if not self._projects.scope(record.project_id).in_scope(record.target):
+            raise AuthorizationDenied(f"{execution_id} ran against an out-of-scope target")
+        self._registry.verify(record.tool_id, version or f"verified-{record.finished_at[:10]}",
+                              execution_id)
+        verified = self._registry.current().get(record.tool_id)
+        if verified is None:  # pragma: no cover - verify() raises first
+            raise NotFound(record.tool_id)
+        self._audit.append({"event": "tool_verified", "at": self._clock.now(),
+                            "project_id": record.project_id, "tool": record.tool_id,
+                            "execution_id": execution_id, "version": verified.version})
+        return verified
 
     # -- internals ------------------------------------------------------------
 
@@ -122,6 +169,35 @@ class ToolExecutionService:
         if is_freeform_command_tool(tool.name):
             check_command(tool.name, str(request.args.get("command", "")))
         return tool, decision
+
+    def _local_args(self, tool: ToolDescriptor, request: ExecutionRequest,
+                    artifact_id: str | None) -> Mapping[str, Any]:
+        """Local engines and built-ins only ever open the authorized artifact file.
+
+        The agent cannot choose the path: it is taken from the artifact record and
+        re-hashed against the authorized target immediately before the run.
+        """
+        if tool.environment not in LOCAL_ENVIRONMENTS and tool.id not in LOCAL_ENGINES:
+            return request.args
+        artifact = self._evidence.get_artifact(artifact_id) if artifact_id else None
+        if artifact is None or artifact.sha256 != request.target:
+            raise AuthorizationDenied(f"{tool.id}: local tools run only on an authorized "
+                                      "artifact file (pass its path or SHA-256 as target)")
+        if self._projects.resolve_target(artifact.path) != artifact.sha256:
+            raise AuthorizationDenied(f"{tool.id}: {artifact.path} changed since it was "
+                                      "authorized; re-authorize it")
+        return {**request.args, "path": artifact.path}
+
+    def _normalise(self, request: ExecutionRequest,
+                   artifact_id: str | None) -> tuple[ExecutionRequest, str | None]:
+        """Resolve file-path targets to SHA-256 so plans and guardrails agree, and fill in
+        the artifact id when the target is a known artifact."""
+        target = self._projects.resolve_target(request.target)
+        if artifact_id is None and len(target) == 64:
+            candidate = f"art-{target[:12]}"
+            if self._evidence.get_artifact(candidate) is not None:
+                artifact_id = candidate
+        return (request if target == request.target else replace(request, target=target)), artifact_id
 
     def _context(self, artifact_id: str | None) -> str:
         if artifact_id is None:

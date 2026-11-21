@@ -8,6 +8,7 @@ No real-world data is involved at any point.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 from typing import Any
 
@@ -20,10 +21,10 @@ class NumpyPointCloudAnalyzer:
     def __init__(self, points: int = 20_000, semi_a_mm: float = 160.0, semi_b_mm: float = 110.0,
                  height_mm: float = 400.0, noise_mm: float = 1.0):
         try:
-            import numpy as np
+            # Loaded dynamically: numpy is an optional extra and is used untyped here.
+            self._np: Any = importlib.import_module("numpy")
         except ImportError as exc:  # pragma: no cover - depends on the environment
             raise RuntimeError("install the vision extra: pip install 'resi[vision]'") from exc
-        self._np = np
         self._truth = {"semi_a_mm": semi_a_mm, "semi_b_mm": semi_b_mm,
                        "height_mm": height_mm, "noise_mm": noise_mm}
         self._points = points

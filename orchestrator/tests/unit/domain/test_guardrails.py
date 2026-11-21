@@ -32,6 +32,10 @@ class TestRedaction:
         assert marker in out
         assert detect_secrets(secret)
 
+    def test_documentation_about_patterns_is_not_a_secret(self) -> None:
+        text = "redacts `password=`/`token=`/`secret=` assignments"
+        assert detect_secrets(text) == () and redact(text) == text
+
     def test_leaves_ordinary_text_alone(self) -> None:
         text = "sub_4012a0 references the AES S-box at 0x8000"
         assert redact(text) == text and detect_secrets(text) == ()
@@ -64,6 +68,23 @@ class TestPersonalData:
                                       "NRIC S1234567D", "DOB: 1980-02-03", "MRN: 00123456"])
     def test_detects_pii(self, text: str) -> None:
         assert detect_pii(text)
+
+    @pytest.mark.parametrize("text", [
+        "CRC-32 table starts 00000000 77073096", "SHA-256 K: 428a2f98 71374491 b5c0fbcf",
+        "offset 0x0040 1000 2000 3000", "build 2026 1121 0001", "pages 100-200 of 3000",
+        "version 12.1.4 build 20260921",
+    ])
+    def test_hex_constants_and_numbers_are_not_phones(self, text: str) -> None:
+        assert "phone" not in detect_pii(text)
+
+    @pytest.mark.parametrize("text", ["+65 9123 4567", "+1 (415) 555-0100", "(415) 555-0100",
+                                      "415-555-0100", "+447911123456"])
+    def test_real_phone_numbers_are_detected(self, text: str) -> None:
+        assert "phone" in detect_pii(f"contact {text} today")
+
+    def test_prose_about_medical_records_is_not_an_identifier(self) -> None:
+        assert "medical-record" not in detect_pii("detects medical record numbers and patient ids")
+        assert "medical-record" in detect_pii("Patient ID: AB12345")
 
     def test_memory_admission(self) -> None:
         assert screen_for_memory("AES-128 in sub_401000", medical_profile=False).trusted

@@ -102,6 +102,13 @@ FALLBACKS: dict[str, tuple[str, ...]] = {
 }
 
 
+CORROBORATION: dict[str, tuple[str, str]] = {
+    kind: ("cli.rizin", ("Independent second engine (RESI-run): corroborate format, imports, "
+                         "functions - use resi_run_local"))
+    for kind in ("elf", "pe", "dos-mz", "macho", "macho-fat", "wasm")
+}
+
+
 def route_for(artifact: Artifact) -> Route:
     if artifact.kind in ROUTES:
         return ROUTES[artifact.kind]
@@ -142,7 +149,7 @@ def plan_research(
         return ResearchPlan(
             artifact.artifact_id, artifact.kind, artifact.module, profile,
             missing=("AUTHORIZATION: artifact not in scope - record the owner's statement first",),
-            rules=rules, authorized=False,
+            rules=rules, authorized=False, target=artifact.sha256,
         )
     stats = stats or {}
     rng = random.Random(seed)
@@ -157,14 +164,28 @@ def plan_research(
         tool_stats = stats_for(stats, chosen, artifact.kind)
         learned = score_tool(tool_stats, explore=explore, rng=rng) if tool_stats.trials else None
         rationale = "; ".join(x for x in (note, tool_stats.explain() if tool_stats.trials else "") if x)
+        decision = scope.check(tool, artifact.sha256)  # same gate the execution path applies
         steps.append(PlanStep(len(steps) + 1, chosen, purpose, tool.security_class, tool.status,
-                              substituted, learned, rationale))
+                              substituted, learned, rationale, decision.allowed, decision.reason))
+
+    recommended: list[str] = []
+    second = CORROBORATION.get(artifact.kind)
+    if second and second[0] not in {s.tool_id for s in steps}:
+        if registry.is_usable(second[0]):
+            tool = registry.require_usable(second[0])
+            decision = scope.check(tool, artifact.sha256)
+            steps.append(PlanStep(len(steps) + 1, tool.id, second[1], tool.security_class,
+                                  tool.status, None, None, "cross-tool corroboration",
+                                  decision.allowed, decision.reason))
+        else:
+            recommended.append(second[0])
 
     if stats and len(steps) > 2:
         anchor, rest = steps[0], steps[1:]
         rest.sort(key=lambda s: -(s.learned_score if s.learned_score is not None else 0.5))
         steps = [anchor, *rest]
     steps = [replace(s, order=i) for i, s in enumerate(steps, start=1)]
-    needs_approval = tuple(s.tool_id for s in steps if s.security_class.requires_approval)
+    needs_approval = tuple(s.tool_id for s in steps if not s.allowed)
     return ResearchPlan(artifact.artifact_id, artifact.kind, artifact.module, profile,
-                        tuple(steps), tuple(missing), needs_approval, rules)
+                        tuple(steps), tuple(missing), needs_approval, rules, target=artifact.sha256,
+                        recommended=tuple(recommended))

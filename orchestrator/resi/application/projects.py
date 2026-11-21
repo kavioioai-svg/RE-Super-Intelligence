@@ -9,7 +9,7 @@ permission.
 from __future__ import annotations
 
 from ..domain.classification import classify
-from ..domain.errors import NotFound
+from ..domain.errors import ClassificationError, NotFound
 from ..domain.models import Approval, Artifact, Project, Scope
 from ..domain.profiles import get_profile
 from .ports import ArtifactReader, Clock, EvidenceRepository, IdGenerator, ScopeRepository
@@ -44,6 +44,17 @@ class ProjectService:
         if scope is None:
             raise NotFound(f"scope for project {project_id}")
         return scope
+
+    def resolve_target(self, target: str) -> str:
+        """Map a file-path target to the artifact's SHA-256 - the identity artifacts are
+        authorized under. URLs, package ids, process names and device serials are
+        returned unchanged, as are paths that are not readable files."""
+        if "/" not in target and not target.startswith("~"):
+            return target
+        try:
+            return self._reader.read(target).sha256
+        except (ClassificationError, OSError):
+            return target
 
     def record_scope_usage(self, scope: Scope) -> None:
         """Persist approval consumption after an execution (no new grants)."""

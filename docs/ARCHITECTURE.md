@@ -15,6 +15,9 @@ RESI uses a hexagonal (ports and adapters) architecture. The agent-facing summar
 | | `evidence_rules.py` | Claim validation, hypothesis status, experiment priority, corroboration |
 | | `learning.py` | Tool bandit, calibration, lesson extraction |
 | | `retrieval.py` | BM25, cosine, reciprocal rank fusion |
+| | `binary_layout.py` | Section tables and build-volatile regions for Mach-O (thin/fat), ELF and PE |
+| | `reconstruction.py` | Byte-level reconstruction scorecard (file, section, function) |
+| | `playbooks.py` | Markdown procedures split into attributed, stable-anchor sections |
 | | `profiles.py`, `geometry.py` | Research profiles; ellipse perimeter |
 | Application | `ports.py` | Protocols: `Clock`, `IdGenerator`, `ArtifactReader`, `ToolTransport`, `EnvironmentProbe`, `Embedder`, `PointCloudAnalyzer`, `AuditLog`, and the repositories |
 | | `projects.py` | Project lifecycle, scope, approvals (human-only operations) |
@@ -22,10 +25,12 @@ RESI uses a hexagonal (ports and adapters) architecture. The agent-facing summar
 | | `execution.py` | Guarded execution: authorize → filter → execute → guard output → persist → audit → learn |
 | | `evidence.py` | Claims, Evidence Validator, hypothesis loop |
 | | `knowledge.py`, `learning.py` | Memory admission and RAG; learning reports and lessons |
+| | `playbooks.py` | Import expert procedures from files or skill folders into memory |
 | | `security_audit.py`, `reporting.py`, `vision.py` | Security Auditor; Markdown report; 3D use case |
 | Inbound adapters | `cli.py`, `mcp_server.py`, `presenters.py` | Human CLI; MCP stdio server; JSON presentation |
 | Outbound adapters | `sqlite_store.py`, `memory_store.py` | Repositories (same contract) |
-| | `infrastructure.py` | Clock, ids, file reader, JSON registry, JSONL audit log, environment probe, callable transport, hashing embedder |
+| | `infrastructure.py` | Clock, ids, file reader, JSON registry, JSONL audit log, environment probe, callable transport, Markdown document source, hashing embedder |
+| | `local_tools.py` | RESI-run tools: reconstruction scorecard and the Rizin engine; composite transport |
 | | `vision_numpy.py`, `serialization.py` | numpy point-cloud analyzer; domain ↔ JSON mapping |
 | Composition root | `bootstrap.py` | Builds the `Container`; manages resource lifetime |
 
@@ -50,6 +55,8 @@ agent ──resi_record_execution──► MCP server ──► ToolExecutionSer
 | Roles, not processes | One evidence store, no inter-agent state drift. Revisit with benchmarks. |
 | Human-only permission changes | The MCP surface cannot create projects, authorize, approve or overlay. |
 | Re-derived audit | The auditor trusts stored facts, not past decisions, so bypassed guardrails surface. |
+| One identity for targets | File paths resolve to SHA-256 before every check, so the planner and the guardrail can never disagree. |
+| Confined local engines | RESI-run tools get the artifact path from the record, never from the caller, and re-hash it before running. |
 | Rejections ≠ tool failures | Learning measures tool reliability, not scope mistakes. |
 | JSON-in-SQLite | Portable to PostgreSQL `JSONB`; schema changes don't need migrations for new optional fields. |
 | Deterministic learning | Seeded exploration, idempotent feedback; results reproduce exactly. |

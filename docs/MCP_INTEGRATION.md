@@ -29,14 +29,18 @@ Re-run after installing or removing tools. Verified status is preserved across r
 | `resi_classify` | no | Classify by content |
 | `resi_plan` | no | Authorized, learned plan |
 | `resi_security_check` | no | Dry-run guardrail verdict |
+| `resi_run_local` | yes | RESI-run second engine (`cli.rizin`), recorded as evidence |
+| `resi_reconstruction_score` | yes | Byte-level scorecard of a rebuild against the original |
 | `resi_record_execution` | yes | Record an agent-made call (guarded, learned from) |
 | `resi_record_claim` | yes | Record a claim |
 | `resi_validate_evidence` | yes | Evidence Validator |
 | `resi_security_audit` | no | Security Auditor |
 | `resi_cleanroom_check` | no | Clean-room gate |
 | `resi_remember` / `resi_recall` | yes / no | Memory and RAG |
+| `resi_import_playbooks` | yes | Expert procedures from skill folders into memory |
 | `resi_learning_report` / `resi_refresh_lessons` | no / yes | Learning engine |
 | `resi_registry` / `resi_refresh_registry` | no / yes | Registry (no overlays) |
+| `resi_verify_tool` | yes | Mark a tool verified from its own successful run |
 | `resi_propose_hypothesis` / `resi_plan_experiment` / `resi_record_outcome` | yes | Hypothesis loop |
 | `resi_report` | no | Markdown report |
 
@@ -49,6 +53,8 @@ Deliberately absent: project creation, artifact/target authorization, approvals,
 | Agent shows no `resi_*` tools | Wrong command path or Python | Use the absolute path to the venv's `resi`; check `resi --version` |
 | `invalid arguments - missing/unknown` | Schema mismatch | Arguments must match `tools/list` exactly; extra keys are rejected |
 | Every plan is unauthorized | Artifact not in scope | A human runs `resi project authorize` |
+| Plan allowed, calls refused | (Fixed in 0.3) target passed in a different form | Upgrade; paths now resolve to the SHA-256. Use `plan.target` |
+| REA decompile fails with `provider_unavailable` in a GUI-launched agent | Apps opened from the Dock don't read your shell profile | Add `GHIDRA_INSTALL_DIR` to the `rea` server's `env` in that agent's MCP config |
 | A REA tool is always `missing` | Registry never refreshed with announced names | `resi_refresh_registry` |
 | Dynamic call rejected | No approval, or it was single-use and consumed | Human runs `resi project approve` |
 | Output to stdout corrupts the session | Something printed to stdout | RESI logs only to stderr; check wrappers |

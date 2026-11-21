@@ -7,7 +7,7 @@ cd orchestrator
 pip install -e '.[dev]'
 ruff check resi tests                     # lint (strict rule set, zero suppressions)
 mypy --strict resi                        # types
-pytest --cov=resi --cov-report=term       # 275 tests
+pytest --cov=resi --cov-report=term       # 339 tests
 pytest ../skills/re-super-intelligence/tests   # 20 skill-package tests
 ```
 
@@ -17,8 +17,8 @@ Treat resource leaks as errors with `pytest -W error::ResourceWarning`.
 
 | Suite | Path | What it proves | Speed |
 |---|---|---|---|
-| Domain unit | `tests/unit/domain` | Classification and parsers, registry and scope, guardrails, evidence rules, learning maths, retrieval, routing | ms, no I/O |
-| Application unit | `tests/unit/application` | Use cases through ports with in-memory adapters: execution guardrails, retries, validator, hypothesis loop, memory admission, learning loop, auditor, reports | ms |
+| Domain unit | `tests/unit/domain` | Classification and parsers, section layouts and reconstruction scoring (synthetic Mach-O/fat/PE and real compiler builds), registry and scope, guardrails, evidence rules, learning maths, retrieval, routing | ms, no I/O |
+| Application unit | `tests/unit/application` | Use cases through ports with in-memory adapters: execution guardrails, plan/guardrail parity, local-engine confinement, retries, validator, hypothesis loop, memory admission, playbook import, learning loop, auditor, reports | ms |
 | Integration | `tests/integration` | One repository contract run against SQLite and in-memory stores; CLI and MCP server end to end (incl. a real subprocess); numpy vision | < 1 s |
 | Architecture | `tests/architecture` | Hexagonal dependency rule; domain is pure Python with no I/O | ms |
 | Acceptance | `tests/acceptance` | The specification's ten acceptance tests | < 1 s |

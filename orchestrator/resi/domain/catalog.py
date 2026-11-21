@@ -191,4 +191,13 @@ EXTERNAL_TOOLS: tuple[ExternalTool, ...] = (
     _x("cli.freecad", Module.VISION, L, "FreeCADCmd freecadcmd"),
 )
 
+BUILTIN_TOOLS: tuple[CatalogGroup, ...] = (
+    _g(Module.BINARY, "builtin", R, (*BIN, "macho-fat", "raw"), ("reconstruction_score",),
+       "reconstruction_score"),
+)
+"""Tools RESI implements itself (server ``resi``); always available."""
+
+LOCAL_ENGINES = frozenset({"cli.rizin"})
+"""External tools RESI can run itself, confined to the authorized artifact file."""
+
 DEFAULT_TIMEOUTS = {"batch_decompile": 600, "extract_firmware": 600, "extract_artifact": 600}

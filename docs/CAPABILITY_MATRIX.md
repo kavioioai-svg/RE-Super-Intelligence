@@ -17,6 +17,13 @@ REA tool counts come from the catalogue (207 tools in total).
 | 3D Vision | Calibration, point clouds, meshes, measurement with uncertainty, CAD | — | numpy, SciPy, OpenCV, Open3D, trimesh, FreeCAD | R, L |
 | Evidence | Unknowns ledger, evidence bundles, reconstruction coverage | 14 tools | RESI evidence store | R, L |
 
+## RESI-run tools
+
+| Tool | Capability | Status |
+|---|---|---|
+| `resi.reconstruction_score` | Byte-level scorecard for Mach-O (thin/fat), ELF, PE; build-volatile regions excluded | Built in; always available |
+| `cli.rizin` | Independent second engine for corroboration (info, sections, imports, strings, functions, disassembly) | Needs Rizin on PATH (`brew install rizin` / package manager) |
+
 ## Platform compatibility
 
 | Tool | macOS (Apple Silicon) | Ubuntu (x86_64 VPS) | Notes |

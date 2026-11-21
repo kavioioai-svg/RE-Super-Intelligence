@@ -16,7 +16,8 @@ We aim to acknowledge reports within 5 business days and to agree a disclosure t
 
 | Version | Supported |
 |---|---|
-| 0.2.x | Yes |
+| 0.3.x | Yes |
+| 0.2.x | Security fixes only |
 | < 0.2 | No |
 
 ## Scope

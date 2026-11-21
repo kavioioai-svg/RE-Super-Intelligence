@@ -11,6 +11,7 @@ from resi.application.evidence import ClaimInput
 from resi.domain.enums import (
     ClaimKind,
     Confidence,
+    ExecutionStatus,
     HypothesisStatus,
     SecurityClass,
     Verification,
@@ -48,7 +49,8 @@ class TestEvidenceValidator:
 
     def test_downgrades_claims_whose_evidence_disappears(self, app: App, ctx: dict[str, str]) -> None:
         claim = app.evidence.record_claim(claim_input(ctx))
-        app.store._executions.pop(ctx["exe"])
+        failed = replace(require(app.store.get_execution(ctx["exe"])), status=ExecutionStatus.ERROR)
+        app.store.save_execution(failed)  # the evidence turns out to be a failed run
         report = app.evidence.validate(ctx["pid"])
         assert report.downgraded[0][0] == claim.claim_id
         stored = app.store.list_claims(ctx["pid"])[0]

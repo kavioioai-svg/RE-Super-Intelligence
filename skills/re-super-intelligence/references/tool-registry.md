@@ -30,6 +30,15 @@ Any agent's MCP naming is accepted (`mcp__rea__x`, `mcp__remote-devices__rea__x`
 
 ---
 
+## RESI-run tools
+
+| Tool | What it does | Class |
+|---|---|---|
+| `resi.reconstruction_score` | Built in. Byte-level scorecard of a rebuild against the authorized original (`reconstruction.md`) | R |
+| `cli.rizin` | Local second engine, run by RESI with `rizin -N -q -c <command>` on the authorized file only; static commands only | R |
+
+Both run through `resi_run_local` / `resi_reconstruction_score`. RESI takes the file path from the artifact record and re-hashes it before every run; an agent-supplied path is ignored.
+
 ## A. Binary Intelligence — server `rea`
 
 | Group | Tools | Class |

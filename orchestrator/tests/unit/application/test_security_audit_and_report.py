@@ -80,3 +80,17 @@ def test_report_separates_evidence_categories(tmp_path: Path) -> None:
     assert report.index("AES string") < hypotheses < report.index("maybe AES-CBC")
     assert observed < hypotheses
     assert "1 rejected by guardrails" not in report  # nothing was rejected here
+
+
+def test_report_surfaces_tool_failures_and_untested_hypotheses(tmp_path: Path) -> None:
+    app, pid, art = setup(tmp_path)
+    app.transport.script["rea.list_strings"] = [TimeoutError()]
+    failed = app.execution.execute(pid, ExecutionRequest("rea.list_strings", art.sha256))
+    app.evidence.record_claim(ClaimInput(pid, art.artifact_id, art.sha256, "analyst", None,
+                                         ClaimKind.HYPOTHESIS, "decompilation unavailable",
+                                         "main returns 42", Confidence.LOW))
+    report = app.reports.render(pid)
+    assert "## Tool failures" in report and failed.execution_id in report
+    assert "Claims: 1 (1 hypotheses)" in report
+    unresolved = report[report.index("## Unresolved questions"):]
+    assert "Untested hypothesis" in unresolved and "rea.list_strings failed" in unresolved

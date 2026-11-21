@@ -6,10 +6,10 @@
 User goal · project id · artifact path · profile.
 
 ## Procedure
-1. `resi_recall` the artifact type and goal. Note relevant findings and lessons; treat them as hypotheses to re-check, not facts.
+1. `resi_recall` the artifact type and goal. Note relevant playbooks, findings and lessons; treat them as hypotheses to re-check, not facts. If recall returns no playbooks, import them first (`resi_import_playbooks`).
 2. Confirm scope: the project exists and the artifact is authorized. If not, stop and ask the human to run `resi project init` / `resi project authorize`.
 3. Write 2–5 research questions, each answerable with evidence (e.g. "Which function builds the update URL?", not "How does it work?").
-4. `resi_plan`. Read `missing` (tools to install or substitutes used), `needs_approval` (dynamic steps), `rules` (profile constraints) and each step's `rationale` (learned reliability).
+4. `resi_plan`. Read `missing` (tools to install), `recommended` (optional tools that would strengthen the plan), `needs_approval`, `rules`, each step's `allowed`/`gate` and `rationale`. Pass `plan.target` as the target of every later call.
 5. Order work: static before dynamic; highest (information gain × relevance) ÷ (cost × risk) first.
 6. For anything dynamic, prepare the exact approval request for the human: tool pattern, target, purpose, what it will and won't touch.
 

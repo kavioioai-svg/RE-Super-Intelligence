@@ -15,6 +15,7 @@ from types import TracebackType
 from typing import Self
 
 from .adapters.outbound.infrastructure import (
+    FilesystemDocumentSource,
     HashingEmbedder,
     InMemoryRegistryRepository,
     JsonlAuditLog,
@@ -25,12 +26,14 @@ from .adapters.outbound.infrastructure import (
     SystemEnvironmentProbe,
     UuidIdGenerator,
 )
+from .adapters.outbound.local_tools import CompositeTransport, LocalToolTransport
 from .adapters.outbound.memory_store import InMemoryStore
 from .adapters.outbound.sqlite_store import SqliteStore
 from .application.evidence import EvidenceService, HypothesisService
 from .application.execution import ToolExecutionService
 from .application.knowledge import KnowledgeService
 from .application.learning import LearningService
+from .application.playbooks import PlaybookService
 from .application.ports import AuditLog, Embedder, RegistryRepository, ToolTransport
 from .application.projects import ProjectService
 from .application.registry_service import RegistryService
@@ -54,6 +57,7 @@ class Container:
     hypotheses: HypothesisService
     knowledge: KnowledgeService
     learning: LearningService
+    playbooks: PlaybookService
     auditor: SecurityAuditor
     reports: ReportService
     audit_log: AuditLog
@@ -103,11 +107,13 @@ def build_container(home: Path | None = None, in_memory: bool = False,
         projects=projects,
         registry=registry,
         research=ResearchService(reader, projects, registry, store),
-        execution=ToolExecutionService(projects, registry, store, store, audit, clock, ids, transport),
+        execution=ToolExecutionService(projects, registry, store, store, audit, clock, ids,
+                                       CompositeTransport(LocalToolTransport(reader), transport)),
         evidence=EvidenceService(store, store, knowledge, clock, ids),
         hypotheses=HypothesisService(store, clock, ids),
         knowledge=knowledge,
         learning=LearningService(store, knowledge),
+        playbooks=PlaybookService(FilesystemDocumentSource(), knowledge),
         auditor=SecurityAuditor(projects, registry, store, store),
         reports=ReportService(projects, store),
         audit_log=audit,

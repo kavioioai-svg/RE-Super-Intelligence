@@ -20,6 +20,7 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
+from ...application.ports import MarkdownDocument
 from ...domain.catalog import ExternalTool
 from ...domain.enums import ToolStatus
 from ...domain.errors import ClassificationError
@@ -29,6 +30,7 @@ from ...domain.retrieval import tokenize
 from .serialization import to_dict, tool_from_dict
 
 HEAD_BYTES = 4096
+MAX_READ_BYTES = 1 << 30  # 1 GiB ceiling for whole-file reads
 
 
 class SystemClock:
@@ -65,6 +67,15 @@ class LocalArtifactReader:
             except zipfile.BadZipFile:
                 members = None
         return ArtifactSample(str(file), file.stat().st_size, digest.hexdigest(), head, members)
+
+    def read_bytes(self, path: str) -> bytes:
+        file = Path(path).expanduser()
+        if not file.is_file():
+            raise ClassificationError(f"file not found: {file}")
+        size = file.stat().st_size
+        if size > MAX_READ_BYTES:
+            raise ClassificationError(f"{file} is {size} bytes; limit is {MAX_READ_BYTES}")
+        return file.read_bytes()
 
 
 class JsonRegistryRepository:
@@ -145,6 +156,9 @@ class CallableTransport:
     def __init__(self, call: Callable[[str, Mapping[str, Any]], Any]):
         self._call = call
 
+    def supports(self, tool_id: str) -> bool:
+        return True
+
     def invoke(self, tool_id: str, args: Mapping[str, Any], timeout_s: int) -> Any:
         pool = ThreadPoolExecutor(max_workers=1)
         future = pool.submit(self._call, tool_id, args)
@@ -154,6 +168,55 @@ class CallableTransport:
             raise TimeoutError(f"{tool_id} exceeded {timeout_s}s") from None
         finally:
             pool.shutdown(wait=False, cancel_futures=True)
+
+
+class FilesystemDocumentSource:
+    """Reads Markdown from files or directory trees, skipping hidden and vendored folders."""
+
+    MAX_FILES = 500
+    MAX_FILE_BYTES = 2_000_000
+    SKIP_DIRS = frozenset({"node_modules", "__pycache__", "venv", ".venv"})
+
+    def markdown_documents(self, paths: Sequence[str]) -> list[MarkdownDocument]:
+        files: list[Path] = []
+        for raw in paths:
+            root = Path(raw).expanduser()
+            if root.is_file() and root.suffix.lower() == ".md":
+                files.append(root)
+            elif root.is_dir():
+                files.extend(sorted(
+                    f for f in root.rglob("*.md")
+                    if f.is_file() and not any(part.startswith(".") or part in self.SKIP_DIRS
+                                               for part in f.relative_to(root).parts[:-1])))
+        documents: list[MarkdownDocument] = []
+        for file in dict.fromkeys(files):  # de-duplicate, keep order
+            if len(documents) >= self.MAX_FILES:
+                break
+            if file.stat().st_size > self.MAX_FILE_BYTES:
+                continue
+            try:
+                text = file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            documents.append(MarkdownDocument(str(file), self._title(file, text),
+                                              self._origin(file), text))
+        return documents
+
+    @staticmethod
+    def _title(file: Path, text: str) -> str:
+        for line in text.splitlines()[:40]:
+            if line.startswith("name:"):
+                return line.split(":", 1)[1].strip() or file.stem
+            if line.startswith("# "):
+                return line[2:].strip()
+        return file.stem
+
+    @staticmethod
+    def _origin(file: Path) -> str:
+        for parent in file.parents:
+            if (parent / "SKILL.md").is_file():
+                return parent.name
+        return file.parent.name
 
 
 class HashingEmbedder:

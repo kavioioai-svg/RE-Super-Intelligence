@@ -7,6 +7,7 @@ implement them; ``resi.bootstrap`` wires the two together.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from ..domain.catalog import ExternalTool
@@ -45,8 +46,14 @@ class ArtifactReader(Protocol):
     def read(self, path: str) -> ArtifactSample:
         """Hash the file and return its head (and archive member names for ZIPs)."""
 
+    def read_bytes(self, path: str) -> bytes:
+        """Whole-file read, bounded by the adapter's size limit."""
+
 
 class ToolTransport(Protocol):
+    def supports(self, tool_id: str) -> bool:
+        """Whether this transport can execute the tool (otherwise the agent must)."""
+
     def invoke(self, tool_id: str, args: Mapping[str, Any], timeout_s: int) -> Any:
         """Call a tool. Raise TimeoutError on timeout; any other exception is a failure."""
 
@@ -54,6 +61,19 @@ class ToolTransport(Protocol):
 class EnvironmentProbe(Protocol):
     def probe(self, tools: Sequence[ExternalTool]) -> dict[str, ToolStatus]:
         """Report which external CLIs / Python libraries are present."""
+
+
+@dataclass(frozen=True, slots=True)
+class MarkdownDocument:
+    path: str
+    title: str
+    origin: str  # e.g. the skill folder a file belongs to
+    text: str
+
+
+class DocumentSource(Protocol):
+    def markdown_documents(self, paths: Sequence[str]) -> list[MarkdownDocument]:
+        """Markdown files at, or under, the given paths (bounded in count and size)."""
 
 
 class Embedder(Protocol):

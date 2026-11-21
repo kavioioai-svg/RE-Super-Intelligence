@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import struct
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TypeVar
@@ -18,6 +18,7 @@ from resi.application.evidence import EvidenceService, HypothesisService
 from resi.application.execution import ToolExecutionService
 from resi.application.knowledge import KnowledgeService
 from resi.application.learning import LearningService
+from resi.application.ports import ToolTransport
 from resi.application.projects import ProjectService
 from resi.application.registry_service import RegistryService
 from resi.application.reporting import ReportService
@@ -73,6 +74,9 @@ class ScriptedTransport:
     script: dict[str, list[Any]] = field(default_factory=dict)
     calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
+    def supports(self, tool_id: str) -> bool:
+        return True
+
     def invoke(self, tool_id: str, args: Mapping[str, Any], timeout_s: int) -> Any:
         self.calls.append((tool_id, dict(args)))
         queue = self.script.get(tool_id, [{"ok": True}])
@@ -108,7 +112,11 @@ ANNOUNCED = tuple(
 
 
 def build_app(announced: Sequence[str] = ANNOUNCED, present: Sequence[str] = ("cli.rizin",),
-              embedder: Any = None) -> App:
+              embedder: Any = None,
+              wrap: Callable[[ScriptedTransport], ToolTransport | None] | None = None) -> App:
+    """Wire the application with test doubles. ``wrap`` lets a test put another
+    transport in front of (or instead of) the scripted one; returning None
+    simulates a host with no transport at all."""
     store, audit, clock, ids = InMemoryStore(), MemoryAuditLog(), FakeClock(), SequentialIds()
     transport = ScriptedTransport()
     reader = LocalArtifactReader()
@@ -119,7 +127,8 @@ def build_app(announced: Sequence[str] = ANNOUNCED, present: Sequence[str] = ("c
     return App(
         store, audit, transport, projects, registry,
         ResearchService(reader, projects, registry, store),
-        ToolExecutionService(projects, registry, store, store, audit, clock, ids, transport),
+        ToolExecutionService(projects, registry, store, store, audit, clock, ids,
+                             wrap(transport) if wrap else transport),
         EvidenceService(store, store, knowledge, clock, ids),
         HypothesisService(store, clock, ids), knowledge, LearningService(store, knowledge),
         SecurityAuditor(projects, registry, store, store), ReportService(projects, store),

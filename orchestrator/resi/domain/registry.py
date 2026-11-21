@@ -6,7 +6,7 @@ import re
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
 
-from .catalog import DEFAULT_TIMEOUTS, EXTERNAL_TOOLS, REA_CATALOGUE
+from .catalog import BUILTIN_TOOLS, DEFAULT_TIMEOUTS, EXTERNAL_TOOLS, REA_CATALOGUE
 from .enums import Module, SecurityClass, ToolStatus
 from .errors import NotFound, ToolNotCallable
 from .models import ToolDescriptor
@@ -190,6 +190,13 @@ def build_registry(
             tools.append(_descriptor(tool_id, Module.UNCATALOGUED, "uncatalogued",
                                      SecurityClass.DYNAMIC, ("any",), ("unknown",),
                                      ToolStatus.DISCOVERED, found, "mcp"))
+
+    for group in BUILTIN_TOOLS:
+        for name in group.tools:
+            tool_id = f"resi.{name}"
+            tools.append(_descriptor(tool_id, group.module, group.group, group.security_class,
+                                     group.input_types, group.operations,
+                                     ToolStatus.DISCOVERED, f"builtin-{discovered_on}", "builtin"))
 
     for ext in EXTERNAL_TOOLS:
         status = external_status.get(ext.id, ToolStatus.UNVERIFIED)

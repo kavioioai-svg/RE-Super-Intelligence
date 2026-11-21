@@ -83,7 +83,8 @@ class TestMcpServer:
         response = server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                                   "params": {"name": name, "arguments": args}})
         assert response is not None
-        return response["result"]
+        result: dict[str, Any] = response["result"]
+        return result
 
     def test_handshake_and_listing(self, state: dict[str, Any]) -> None:
         server = self._server(state)
