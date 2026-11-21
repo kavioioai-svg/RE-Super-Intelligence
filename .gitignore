@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# RESI state and research material - never commit evidence or samples
+.resi/
+*.db
+*.db-wal
+*.db-shm
+audit.log
+samples/
+artifacts/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Secrets
+.env
+.env.*

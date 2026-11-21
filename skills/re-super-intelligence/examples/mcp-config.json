@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "resi": {
+      "command": "/absolute/path/to/.resi/venv/bin/resi",
+      "args": ["mcp"],
+      "env": {
+        "RESI_HOME": "/absolute/path/to/.resi"
+      }
+    }
+  }
+}

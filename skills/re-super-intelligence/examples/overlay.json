@@ -1,0 +1,20 @@
+{
+  "ghidra.decompile_function": {
+    "module": "binary",
+    "security_class": "R",
+    "input_types": ["elf", "pe", "macho"],
+    "operations": ["decompile"]
+  },
+  "ghidra.list_functions": {
+    "module": "binary",
+    "security_class": "R",
+    "input_types": ["elf", "pe", "macho"],
+    "operations": ["function_map"]
+  },
+  "ghidra.rename_function": {
+    "module": "binary",
+    "security_class": "L",
+    "input_types": ["elf", "pe", "macho"],
+    "operations": ["annotate"]
+  }
+}
