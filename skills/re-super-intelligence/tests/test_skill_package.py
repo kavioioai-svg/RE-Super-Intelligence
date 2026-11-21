@@ -5,6 +5,7 @@ from __future__ import annotations
 import codecs
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -91,3 +92,39 @@ def test_installer_never_overwrites(tmp_path: Path) -> None:
                             capture_output=True, text=True, timeout=60, check=False)
     assert forced.returncode == 0
     assert list(tmp_path.glob(f"{SKILL.name}.backup-*")), "--force must keep a backup"
+
+
+def test_installer_finds_a_modern_python_for_runtime_only() -> None:
+    out = subprocess.run(["bash", str(SKILL / "scripts" / "install.sh"), "--runtime-only",
+                          "--dry-run", "--venv", "/nonexistent/venv"],
+                         capture_output=True, text=True, timeout=60, check=False)
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "Using Python" in out.stdout and "nothing was installed" in out.stdout
+    assert "Skill installed" not in out.stdout  # --runtime-only leaves the skill alone
+
+
+def test_installer_explains_when_python_is_too_old(tmp_path: Path) -> None:
+    """Only a 3.9 python3 on PATH, like a stock Mac: clear error, no install."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake = bin_dir / "python3"
+    fake.write_text('#!/bin/sh\ncase "$1" in --version) echo "Python 3.9.6";; esac\nexit 1\n')
+    fake.chmod(0o755)
+    for tool in ("dirname", "awk"):
+        real = shutil.which(tool)
+        assert real, f"{tool} is required to run this test"
+        (bin_dir / tool).symlink_to(real)
+    bash = shutil.which("bash")
+    assert bash
+    out = subprocess.run([bash, str(SKILL / "scripts" / "install.sh"), "--runtime-only"],
+                         capture_output=True, text=True, timeout=60, check=False,
+                         env={"PATH": str(bin_dir), "HOME": str(tmp_path)})
+    assert out.returncode == 1
+    assert "Python 3.11+ not found" in out.stdout and "Python 3.9.6" in out.stdout
+    assert "PYTHON=" in out.stdout
+
+
+def test_installer_help_stops_at_the_header() -> None:
+    out = subprocess.run(["bash", str(SKILL / "scripts" / "install.sh"), "--help"],
+                         capture_output=True, text=True, timeout=60, check=True)
+    assert "--runtime-only" in out.stdout and "set -euo" not in out.stdout

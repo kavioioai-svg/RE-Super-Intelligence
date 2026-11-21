@@ -50,7 +50,8 @@ Several machines or users can share evidence only through a shared database — 
 
 | Problem | Fix |
 |---|---|
-| `error: Python 3.11+ required` | Install a newer Python and pass it explicitly when creating the venv |
+| `error: Python 3.11+ not found` | Install one (`brew install python@3.12` / `apt install python3.12-venv`) or run with `PYTHON=/path/to/python3.12` |
+| Skill already installed, runtime missing | `install.sh --runtime-only` |
 | `install.sh: … already exists` | Intentional; add `--force` (keeps a backup) |
 | `install the vision extra` | `pip install -e './orchestrator[vision]'` |
 | `database is locked` | Another RESI process holds a write; retry — WAL mode keeps readers unblocked |

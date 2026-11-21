@@ -8,7 +8,7 @@ pip install -e '.[dev]'
 ruff check resi tests                     # lint (strict rule set, zero suppressions)
 mypy --strict resi                        # types
 pytest --cov=resi --cov-report=term       # 275 tests
-pytest ../skills/re-super-intelligence/tests   # 17 skill-package tests
+pytest ../skills/re-super-intelligence/tests   # 20 skill-package tests
 ```
 
 Treat resource leaks as errors with `pytest -W error::ResourceWarning`.
@@ -22,7 +22,7 @@ Treat resource leaks as errors with `pytest -W error::ResourceWarning`.
 | Integration | `tests/integration` | One repository contract run against SQLite and in-memory stores; CLI and MCP server end to end (incl. a real subprocess); numpy vision | < 1 s |
 | Architecture | `tests/architecture` | Hexagonal dependency rule; domain is pure Python with no I/O | ms |
 | Acceptance | `tests/acceptance` | The specification's ten acceptance tests | < 1 s |
-| Skill package | `skills/…/tests` | Frontmatter, resolvable references, roles, agent neutrality, discovery script, safe installer | < 1 s |
+| Skill package | `skills/…/tests` | Frontmatter, resolvable references, roles, agent neutrality, discovery script, safe installer and Python detection | < 1 s |
 
 ## Acceptance tests
 

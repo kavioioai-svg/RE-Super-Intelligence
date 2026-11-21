@@ -1,8 +1,12 @@
 # RE Super Intelligence (RESI)
 
+[![ci](https://github.com/kavioioai-svg/RE-Super-Intelligence/actions/workflows/ci.yml/badge.svg)](https://github.com/kavioioai-svg/RE-Super-Intelligence/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)
+
 **Evidence-driven reverse engineering research for any coding agent** — with a learning engine, long-term memory with RAG, security guardrails, an evidence validator and a security auditor.
 
-RESI is not another disassembler. It is the layer that decides **what** to run, **in what order**, and **what the result proves**, then drives the tools you already have (primarily the [REA](#tooling) MCP server, plus Ghidra, Rizin, Frida, binwalk, JADX, TShark, Open3D and others). Every claim is traced to the tool execution that produced it; every unsafe action is stopped before it runs; every engagement makes the next one smarter.
+RESI is not another disassembler. It is the layer that decides **what** to run, **in what order**, and **what the result proves**, then drives the tools you already have (primarily the [REA](https://github.com/morluto/rea) MCP server, plus Ghidra, Rizin, Frida, binwalk, JADX, TShark, Open3D and others). Every claim is traced to the tool execution that produced it; every unsafe action is stopped before it runs; every engagement makes the next one smarter.
 
 ```
 skill (what agents read)  ─┐
@@ -29,8 +33,9 @@ CLI (humans)  ─────────────┘    validate · audit ·
 git clone https://github.com/kavioioai-svg/RE-Super-Intelligence.git
 cd RE-Super-Intelligence
 
-# 1. Install the skill into your agent's skills folder (+ the runtime in a venv)
-skills/re-super-intelligence/scripts/install.sh --target ~/.agents/skills --with-runtime
+# 1. Install the skill into your agent's skills folder (+ the runtime in a venv).
+#    Needs Python 3.11+; the installer finds python3.13/3.12/3.11 itself, or set PYTHON=/path/to/python.
+skills/re-super-intelligence/scripts/install.sh --target <your agent's skills folder> --with-runtime
 
 # 2. See what this machine can do (read-only)
 python3 skills/re-super-intelligence/scripts/discover_environment.py
@@ -70,7 +75,7 @@ ruff check resi tests && mypy --strict resi && pytest --cov=resi
 pytest ../skills/re-super-intelligence/tests
 ```
 
-292 tests (290 pass; 2 live-tool checks skip explicitly until run on a machine with Ghidra/REA), 92 % branch coverage, strict typing, zero lint or type suppressions. CI runs on Ubuntu and macOS, Python 3.11–3.13. Details: [`docs/TESTING.md`](docs/TESTING.md).
+295 tests (293 pass; 2 live-tool checks skip explicitly until run on a machine with Ghidra/REA), 92 % branch coverage, strict typing, zero lint or type suppressions. CI runs on Ubuntu and macOS, Python 3.11–3.13. Details: [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Roadmap
 
@@ -98,4 +103,14 @@ RESI is for authorized research on software, firmware, devices and data you own 
 
 ## Tooling
 
-REA (Reverse Engineering Assistant) is an MCP server exposing static, dynamic, mobile, firmware, protocol and web analysis tools. RESI catalogues its tools but works without it: any tool from any MCP server, CLI or Python library can be registered.
+RESI builds on existing tools rather than replacing them. [REA (Reverse Engineer Anything)](https://github.com/morluto/rea) is an MIT-licensed MCP server exposing static, dynamic, mobile, firmware, protocol and web analysis tools; RESI catalogues its 207 tools (REA 6.7.0). Deep native analysis in REA needs an engine such as Ghidra — check with `npx rea-agents doctor`.
+
+RESI works without any of them: classification, planning, guardrails, evidence, memory and reporting run on the standard library, and any tool from any MCP server, CLI or Python library can be registered. RESI does not bundle or redistribute third-party tools; each keeps its own licence.
+
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) and the [code of conduct](CODE_OF_CONDUCT.md). Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+Copyright 2026 Kavio Pte Ltd. Licensed under the [Apache License, Version 2.0](LICENSE); see [NOTICE](NOTICE).

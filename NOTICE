@@ -1,0 +1,9 @@
+RE Super Intelligence (RESI)
+Copyright 2026 Kavio Pte Ltd
+
+This product includes software developed at Kavio Pte Ltd.
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+RESI integrates with, but does not bundle, third-party reverse engineering
+tools (for example REA, Ghidra, Rizin, Frida, binwalk, JADX, TShark, Open3D).
+Each is distributed by its own authors under its own license.

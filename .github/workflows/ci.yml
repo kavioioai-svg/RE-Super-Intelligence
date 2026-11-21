@@ -41,6 +41,18 @@ jobs:
         run: pytest -W error::ResourceWarning --cov=resi --cov-report=term --cov-fail-under=90 -rs
       - name: Skill package tests
         run: python -m pytest skills/re-super-intelligence/tests -q
+      - name: Wheel builds with licence metadata
+        run: |
+          python -m pip wheel --no-deps -w dist ./orchestrator
+          python - <<'PY'
+          import glob, zipfile
+          wheel = zipfile.ZipFile(glob.glob("dist/resi-*.whl")[0])
+          names = wheel.namelist()
+          meta = wheel.read(next(n for n in names if n.endswith("METADATA"))).decode()
+          assert "License-Expression: Apache-2.0" in meta, "licence expression missing"
+          for f in ("LICENSE", "NOTICE"):
+              assert any(n.endswith(f"licenses/{f}") for n in names), f"{f} missing from wheel"
+          PY
       - name: Core has no third-party runtime dependencies
         run: |
           python - <<'PY'

@@ -7,8 +7,32 @@ name = "resi"
 version = "0.2.0"
 description = "RE Super Intelligence - evidence-driven reverse engineering research orchestrator"
 requires-python = ">=3.11"
-license = "LicenseRef-Proprietary"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Kavio Pte Ltd" }]
+keywords = ["reverse-engineering", "mcp", "agent-skills", "binary-analysis", "firmware",
+            "evidence", "security", "ghidra", "rizin"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Disassemblers",
+    "Typing :: Typed",
+]
+
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/kavioioai-svg/RE-Super-Intelligence"
+Issues = "https://github.com/kavioioai-svg/RE-Super-Intelligence/issues"
+Changelog = "https://github.com/kavioioai-svg/RE-Super-Intelligence/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 vision = ["numpy>=1.24"]

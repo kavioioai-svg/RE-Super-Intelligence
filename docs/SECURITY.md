@@ -50,4 +50,4 @@ Research artifacts (often proprietary) · evidence and memory stores · the anal
 
 ## Reporting a vulnerability
 
-Open a private security advisory on the repository rather than a public issue. Include steps to reproduce, impact, and the RESI version (`resi --version`).
+See the repository's [security policy](../SECURITY.md): report privately through **Security → Report a vulnerability**, never as a public issue.
