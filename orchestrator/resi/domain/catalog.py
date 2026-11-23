@@ -201,3 +201,15 @@ LOCAL_ENGINES = frozenset({"cli.rizin"})
 """External tools RESI can run itself, confined to the authorized artifact file."""
 
 DEFAULT_TIMEOUTS = {"batch_decompile": 600, "extract_firmware": 600, "extract_artifact": 600}
+
+
+def builtin_tool_ids() -> frozenset[str]:
+    """Every tool id the built-in catalogue knows: REA tools, RESI's own, external engines.
+
+    Tools announced by other servers (uncatalogued or overlay entries) are not
+    included: their names are chosen by third parties and may be private.
+    """
+    ids = {f"rea.{name}" for group in REA_CATALOGUE for name in group.tools}
+    ids |= {f"resi.{name}" for group in BUILTIN_TOOLS for name in group.tools}
+    ids |= {ext.id for ext in EXTERNAL_TOOLS}
+    return frozenset(ids)

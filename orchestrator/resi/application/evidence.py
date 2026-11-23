@@ -162,7 +162,7 @@ class EvidenceService:
             self._ids.new("epi"), claim.tool_id, artifact.kind if artifact else "any",
             success=correct, latency_ms=0.0, recorded_at=now,
             validated_claims=int(correct), downgraded_claims=int(not correct),
-            kind="claim_feedback",
+            kind="claim_feedback", tool_version=claim.tool_version,
         ))
 
 

@@ -306,6 +306,7 @@ class Episode:
     validated_claims: int = 0
     downgraded_claims: int = 0
     kind: str = "execution"  # "execution" | "claim_feedback"
+    tool_version: str = ""  # registry version at the time; "" for episodes recorded earlier
 
     @property
     def counts_as_trial(self) -> bool:
@@ -319,3 +320,14 @@ class CalibrationPoint:
     confidence: Confidence
     correct: bool
     recorded_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class StoredContribution:
+    """An accepted learning contribution: validated aggregate counters only."""
+
+    contribution_id: str
+    digest: str  # identity of the counters; tells a retry from a conflicting reuse
+    schema_version: int
+    accepted_on: str  # UTC date only
+    payload: dict[str, Any]

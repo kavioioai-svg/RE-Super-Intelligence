@@ -241,6 +241,7 @@ class ToolExecutionService:
             self._ids.new("epi"), record.tool_id, self._context(record.artifact_id),
             record.succeeded, record.latency_ms, record.finished_at,
             failure_reason="" if record.succeeded else (reason or record.status.value),
+            tool_version=record.tool_version,
         ))
         event: Mapping[str, Any] = {
             "event": "execution", "at": record.finished_at, "project_id": record.project_id,

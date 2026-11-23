@@ -14,6 +14,11 @@ from pathlib import Path
 from types import TracebackType
 from typing import Self
 
+from .adapters.outbound.contribution_store import (
+    FilePendingIdStore,
+    InMemoryPendingIdStore,
+    SqliteContributionStore,
+)
 from .adapters.outbound.infrastructure import (
     FilesystemDocumentSource,
     HashingEmbedder,
@@ -29,6 +34,7 @@ from .adapters.outbound.infrastructure import (
 from .adapters.outbound.local_tools import CompositeTransport, LocalToolTransport
 from .adapters.outbound.memory_store import InMemoryStore
 from .adapters.outbound.sqlite_store import SqliteStore
+from .application.contributions import ContributionService, IngestionService, RankingService
 from .application.evidence import EvidenceService, HypothesisService
 from .application.execution import ToolExecutionService
 from .application.knowledge import KnowledgeService
@@ -41,6 +47,7 @@ from .application.reporting import ReportService
 from .application.research import ResearchService
 from .application.security_audit import SecurityAuditor
 from .application.vision import VisionService
+from .domain.catalog import builtin_tool_ids
 
 
 def default_home() -> Path:
@@ -61,6 +68,7 @@ class Container:
     auditor: SecurityAuditor
     reports: ReportService
     audit_log: AuditLog
+    contributions: ContributionService
     _close: Callable[[], None] = field(default=lambda: None, repr=False)
 
     def close(self) -> None:
@@ -89,14 +97,17 @@ def build_container(home: Path | None = None, in_memory: bool = False,
     store: SqliteStore | InMemoryStore
     registry_repo: RegistryRepository
     audit: AuditLog
+    pending: FilePendingIdStore | InMemoryPendingIdStore
     if in_memory:
         store, registry_repo, audit = InMemoryStore(), InMemoryRegistryRepository(), MemoryAuditLog()
+        pending = InMemoryPendingIdStore()
     else:
         root = home or default_home()
         root.mkdir(parents=True, exist_ok=True)
         store = SqliteStore(root / "resi.db")
         registry_repo = JsonRegistryRepository(root / "registry.json")
         audit = JsonlAuditLog(root / "audit.log")
+        pending = FilePendingIdStore(root / "contribution-pending.json")
     if embedder is None and use_default_embedder:
         embedder = HashingEmbedder()
 
@@ -117,5 +128,22 @@ def build_container(home: Path | None = None, in_memory: bool = False,
         auditor=SecurityAuditor(projects, registry, store, store),
         reports=ReportService(projects, store),
         audit_log=audit,
+        contributions=ContributionService(store, pending, builtin_tool_ids()),
         _close=store.close if isinstance(store, SqliteStore) else (lambda: None),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class IngestionContainer:
+    """Private ingestion side: a contributions database, separate from any user store."""
+
+    store: SqliteContributionStore
+    ingestion: IngestionService
+    ranking: RankingService
+
+
+def build_ingestion(db_path: Path, max_bytes: int | None = None) -> IngestionContainer:
+    store = SqliteContributionStore(db_path)
+    ingestion = (IngestionService(store, SystemClock(), builtin_tool_ids()) if max_bytes is None
+                 else IngestionService(store, SystemClock(), builtin_tool_ids(), max_bytes))
+    return IngestionContainer(store, ingestion, RankingService(store))

@@ -140,7 +140,7 @@ def episode_from_dict(d: dict[str, Any]) -> Episode:
     return Episode(d["episode_id"], d["tool_id"], d["context"], bool(d["success"]),
                    float(d["latency_ms"]), d["recorded_at"], d.get("failure_reason", ""),
                    int(d.get("validated_claims", 0)), int(d.get("downgraded_claims", 0)),
-                   d.get("kind", "execution"))
+                   d.get("kind", "execution"), d.get("tool_version", ""))
 
 
 def calibration_from_dict(d: dict[str, Any]) -> CalibrationPoint:

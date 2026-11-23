@@ -102,7 +102,7 @@ RESI is for authorized research on software, firmware, devices and data you own 
 
 ## Documentation
 
-[Architecture](docs/ARCHITECTURE.md) · [Capability matrix](docs/CAPABILITY_MATRIX.md) · [MCP integration](docs/MCP_INTEGRATION.md) · [Security](docs/SECURITY.md) · [Research workflows](docs/RESEARCH_WORKFLOWS.md) · [Evidence schema](docs/EVIDENCE_SCHEMA.md) · [Learning engine](docs/LEARNING_ENGINE.md) · [Testing](docs/TESTING.md) · [Deployment](docs/DEPLOYMENT.md) · [Changelog](CHANGELOG.md)
+[Architecture](docs/ARCHITECTURE.md) · [Capability matrix](docs/CAPABILITY_MATRIX.md) · [MCP integration](docs/MCP_INTEGRATION.md) · [Security](docs/SECURITY.md) · [Research workflows](docs/RESEARCH_WORKFLOWS.md) · [Evidence schema](docs/EVIDENCE_SCHEMA.md) · [Learning engine](docs/LEARNING_ENGINE.md) · [Learning contributions](docs/LEARNING_CONTRIBUTIONS.md) · [Testing](docs/TESTING.md) · [Deployment](docs/DEPLOYMENT.md) · [Changelog](CHANGELOG.md)
 
 Skill references: [playbooks](skills/re-super-intelligence/references/playbooks.md) · [reconstruction](skills/re-super-intelligence/references/reconstruction.md) · [all references](skills/re-super-intelligence/references/)
 

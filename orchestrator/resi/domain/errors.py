@@ -41,3 +41,15 @@ class NotFound(ResiError):
 
 class ClassificationError(ResiError):
     """The artifact could not be read or parsed."""
+
+
+class InvalidContribution(ResiError):
+    """A learning contribution failed schema or value validation."""
+
+    def __init__(self, errors: tuple[str, ...]):
+        self.errors = errors
+        super().__init__("; ".join(errors[:5]) + (" ..." if len(errors) > 5 else ""))
+
+
+class ContributionConflict(ResiError):
+    """A contribution id was reused with different counters."""

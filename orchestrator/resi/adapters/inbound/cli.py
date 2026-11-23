@@ -8,13 +8,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 from ... import __version__
-from ...bootstrap import Container, build_container
+from ...bootstrap import Container, build_container, build_ingestion
+from ...domain.contributions import (
+    MIN_CALIBRATION_POINTS,
+    MIN_CONTRIBUTIONS,
+    MIN_SAMPLES,
+    PRIOR_STRENGTH,
+    RankingParameters,
+    render,
+)
 from ...domain.enums import Module, SecurityClass
 from ...domain.errors import ResiError
 from ...domain.models import ExecutionRequest
@@ -138,7 +147,76 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("vision-demo", help="reproducible synthetic 3D analysis (needs numpy)")
     p.add_argument("--seed", type=int, default=7)
     sub.add_parser("mcp", help="serve RESI as an MCP server over stdio")
+
+    contribute = sub.add_parser(
+        "contribute", help="opt-in learning contributions: see and export what you would share")
+    csub = contribute.add_subparsers(dest="action", required=True)
+    csub.add_parser("preview", help="print the exact JSON that export would write (offline)")
+    p = csub.add_parser("export", help="write the contribution JSON to a file (offline)")
+    p.add_argument("--out", required=True, type=Path)
+    p.add_argument("--force", action="store_true", help="overwrite an existing file")
+
+    ingest = sub.add_parser(
+        "ingest", help="private contribution ingestion and ranking (Kavio infrastructure)")
+    isub = ingest.add_subparsers(dest="action", required=True)
+    isub.add_parser("serve", help="run the authenticated HTTPS endpoint (config from env)")
+    p = isub.add_parser("accept", help="validate and store contribution files received offline")
+    p.add_argument("--db", required=True, type=Path)
+    p.add_argument("files", nargs="+", type=Path)
+    p = isub.add_parser("rank", help="run the deterministic ranking job")
+    p.add_argument("--db", required=True, type=Path)
+    p.add_argument("--out", type=Path, help="write the ranking artifact here (default: stdout)")
+    p.add_argument("--min-samples", type=int, default=MIN_SAMPLES)
+    p.add_argument("--min-contributions", type=int, default=MIN_CONTRIBUTIONS)
+    p.add_argument("--prior-strength", type=float, default=PRIOR_STRENGTH)
+    p.add_argument("--min-calibration-points", type=int, default=MIN_CALIBRATION_POINTS)
     return parser
+
+
+def _write_new(path: Path, text: str, force: bool) -> None:
+    if path.exists() and not force:
+        raise ValueError(f"{path} exists; pass --force to overwrite")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text(text)
+    tmp.replace(path)
+
+
+def run_ingest(args: argparse.Namespace) -> int:
+    """Private-side commands: they never open a user's RESI state."""
+    if args.action == "serve":  # pragma: no cover - long-running; covered by the demo
+        import logging
+
+        from .ingest_server import IngestConfig, serve
+
+        # Request lines are method, path and status only (see ingest_server).
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+        config = IngestConfig.from_env(os.environ)
+        serve(config, build_ingestion(config.db_path, config.max_bytes).ingestion)
+        return EXIT_OK
+    container = build_ingestion(args.db)
+    if args.action == "accept":
+        results: list[dict[str, Any]] = []
+        failed = False
+        for path in args.files:
+            try:
+                result = container.ingestion.accept(path.read_bytes())
+                results.append({"file": str(path), "status": result.status,
+                                "contribution_id": result.contribution_id})
+            except ResiError as exc:
+                failed = True
+                results.append({"file": str(path), "status": "rejected", "error": str(exc)})
+        _emit(results)
+        return EXIT_ERROR if failed else EXIT_OK
+    params = RankingParameters(args.min_samples, args.min_contributions, args.prior_strength,
+                               args.min_calibration_points)
+    text = render(container.ranking.rank(params))
+    if args.out:
+        _write_new(args.out, text, force=True)
+        _emit({"written": str(args.out), "bytes": len(text.encode("utf-8"))})
+    else:
+        print(text, end="")
+    return EXIT_OK
 
 
 def run(args: argparse.Namespace, container: Container) -> int:
@@ -212,12 +290,25 @@ def run(args: argparse.Namespace, container: Container) -> int:
         from .mcp_server import serve
 
         serve(c)
+    elif args.command == "contribute":
+        if args.action == "preview":
+            print(c.contributions.preview(), end="")
+        else:
+            export = c.contributions.prepare_export()
+            _write_new(args.out, export.text, args.force)
+            c.contributions.complete_export(export.contribution_id)
+            print(json.dumps({"written": str(args.out), "contribution_id": export.contribution_id,
+                              "groups": export.groups,
+                              "bytes": len(export.text.encode("utf-8"))}, indent=2),
+                  file=sys.stderr)
     return EXIT_OK
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.command == "ingest":
+            return run_ingest(args)
         with build_container(args.home) as container:
             return run(args, container)
     except (ResiError, ValueError, FileNotFoundError) as exc:

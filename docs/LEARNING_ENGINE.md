@@ -46,6 +46,10 @@ resi learn --refresh-lessons    # write lessons to memory
 
 Healthy signs: demoted tools match ones you know are flaky in your setup; Brier score falls over time; recalled lessons change plans. Unit tests cover posterior maths, demotion thresholds, seeded exploration, rejection exclusion, calibration and lesson extraction (`tests/unit/domain/test_learning_retrieval_rules.py`, `tests/unit/application/test_evidence_knowledge_learning.py`).
 
+## Sharing what RESI learns (opt-in)
+
+Aggregate counters from these tables can be shared voluntarily with `resi contribute preview` / `resi contribute export`; nothing is sent automatically. See [Learning contributions](LEARNING_CONTRIBUTIONS.md) for the schema, the private ingestion endpoint and the ranking job.
+
 ## Resetting
 
 Learning lives in the `episodes` and `calibration` tables. Back up `resi.db`, then delete rows from those tables to start fresh; lessons can be removed from `documents` where `kind='lesson'`.

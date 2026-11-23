@@ -24,6 +24,7 @@ from ..domain.models import (
     KnowledgeDocument,
     Project,
     Scope,
+    StoredContribution,
 )
 from ..domain.registry import CapabilityRegistry
 
@@ -160,3 +161,25 @@ class EpisodeRepository(Protocol):
     def add_calibration(self, point: CalibrationPoint) -> None: ...
 
     def list_calibration(self) -> list[CalibrationPoint]: ...
+
+
+class ContributionIdStore(Protocol):
+    """Holds the id of the next export so preview and export show the same payload."""
+
+    def get(self) -> str | None: ...
+
+    def put(self, contribution_id: str) -> None: ...
+
+    def clear(self) -> None: ...
+
+
+class ContributionRepository(Protocol):
+    """Accepted learning contributions (private ingestion side)."""
+
+    def get(self, contribution_id: str) -> StoredContribution | None: ...
+
+    def add(self, record: StoredContribution) -> bool:
+        """Insert; False (and no change) when the id is already stored."""
+        ...
+
+    def list_payloads(self) -> list[dict[str, Any]]: ...

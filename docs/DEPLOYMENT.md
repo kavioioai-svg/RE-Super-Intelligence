@@ -56,3 +56,7 @@ Several machines or users can share evidence only through a shared database — 
 | `install the vision extra` | `pip install -e './orchestrator[vision]'` |
 | `database is locked` | Another RESI process holds a write; retry — WAL mode keeps readers unblocked |
 | Agent can't start the MCP server | Use absolute paths; test with `echo '{"jsonrpc":"2.0","id":1,"method":"ping"}' \| resi mcp` |
+
+## Private contribution ingestion (Kavio infrastructure)
+
+The opt-in learning-contribution endpoint is the one networked component, and it runs only on Kavio's own servers: `resi ingest serve` with TLS and a bearer-token hash supplied through environment variables. User installations never run it. See [Learning contributions](LEARNING_CONTRIBUTIONS.md#accepting-uploads-private-team).

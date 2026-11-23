@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- Opt-in learning contributions MVP (`docs/LEARNING_CONTRIBUTIONS.md`):
+  - `resi contribute preview` and `resi contribute export --out FILE`: offline, byte-identical, versioned (`resi.contribution` v1) aggregate counters with an explicit field allowlist (built-in tool ids, tool version, coarse artifact kind, outcome counts, latency buckets, validator outcomes by confidence) and a fresh random id per export. Access denials and resolved setup failures are not counted as tool failures. Not exposed over MCP.
+  - `resi ingest serve`: private, authenticated HTTPS endpoint with deploy-time configuration; strict schema, value, range and size validation; idempotent retries and conflict rejection by contribution id; stores validated aggregates only and logs no client addresses, bodies or credentials. `resi ingest accept` loads files received offline.
+  - `resi ingest rank`: deterministic ranking job pooling by tool, version and artifact kind with published sample sizes, Beta smoothing toward each tool's pooled rate, a documented sample and contributor threshold below which local ranking is kept, and separate confidence calibration; writes a versioned, data-only `resi.ranking` v1 artifact.
+  - `docs/examples/synthetic_contributions.py` and `docs/examples/run_contributions_demo.sh` for a reproducible end-to-end demo with synthetic data.
+- Learning episodes now record the tool's registry version (`tool_version`); older episodes report it as `unspecified`.
+
 ### Changed
 - Learning engine: a setup failure (no analysis provider, a program not installed, a tool not configured) stops counting against a tool once that tool succeeds later; it measured the environment, not the tool. Unresolved setup failures still count, so a broken tool is still demoted. Tool explanations show how many resolved setup failures were excluded.
 - Reports list a tool failure under "Unresolved questions" only until the same tool succeeds in the project; the full failure history stays in "Tool failures".
