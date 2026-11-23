@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 
@@ -63,3 +64,38 @@ def corroborated_subjects(claims: Iterable[Claim], minimum_tools: int = 2) -> se
         if claim.subject and claim.kind.needs_execution and claim.verification is not Verification.DOWNGRADED:
             tools_by_subject[claim.subject].add(claim.tool_id)
     return {s for s, tools in tools_by_subject.items() if len(tools) >= minimum_tools}
+
+
+# A verified claim settles a hypothesis claim only when it says so explicitly:
+# a settling verb followed, in the same sentence, by the hypothesis claim id.
+# Sharing a subject is not enough - a verified claim can contradict a hypothesis
+# about the same subject.
+_SUPPORT_VERBS = ("settles", "settle", "confirms", "confirm", "supports", "support")
+_REJECT_VERBS = ("refutes", "refute", "rejects", "reject", "contradicts", "contradict",
+                 "falsifies", "falsify")
+_SETTLING_SENTENCE = re.compile(
+    r"\b(" + "|".join(_SUPPORT_VERBS + _REJECT_VERBS) + r")\b([^.;\n]*)", re.IGNORECASE)
+_CLAIM_ID = re.compile(r"\bclm-[0-9a-z]+\b")
+_NEGATED = re.compile(r"\b(not|never|no)\s+$|n't\s+$", re.IGNORECASE)
+
+
+def settled_hypotheses(verified: Claim) -> dict[str, Verification]:
+    """Hypothesis claim ids that ``verified`` explicitly settles, with the resulting state.
+
+    "Settles/confirms/supports clm-x" marks clm-x supported; "refutes/rejects/
+    contradicts/falsifies clm-x" marks it rejected. If one claim does both to
+    the same id, rejection wins (falsification first).
+    """
+    if verified.kind is not ClaimKind.VERIFIED or verified.verification is Verification.DOWNGRADED:
+        return {}
+    text = f"{verified.observation} {verified.interpretation}"
+    result: dict[str, Verification] = {}
+    for match in _SETTLING_SENTENCE.finditer(text):
+        if _NEGATED.search(text[max(0, match.start() - 12):match.start()]):
+            continue  # "does not contradict clm-x" settles nothing
+        state = (Verification.REJECTED if match.group(1).lower() in _REJECT_VERBS
+                 else Verification.SUPPORTED)
+        for claim_id in _CLAIM_ID.findall(match.group(2)):
+            if claim_id != verified.claim_id and result.get(claim_id) is not Verification.REJECTED:
+                result[claim_id] = state
+    return result

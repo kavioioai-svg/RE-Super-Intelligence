@@ -16,6 +16,7 @@ from ..domain.evidence_rules import (
     corroborated_subjects,
     derive_hypothesis_status,
     experiment_priority,
+    settled_hypotheses,
     validate_claim,
 )
 from ..domain.models import CalibrationPoint, Claim, Episode, Experiment, Hypothesis
@@ -45,6 +46,7 @@ class ValidationReport:
     downgraded: tuple[tuple[str, tuple[str, ...]], ...]
     corroborated: tuple[str, ...]
     ingested: int
+    settled: tuple[tuple[str, str, str], ...] = ()  # (hypothesis claim, new state, settled by)
 
 
 class EvidenceService:
@@ -52,9 +54,11 @@ class EvidenceService:
 
     The validator never deletes: unsupported claims are downgraded to
     hypotheses with the reasons appended to their limitations. Claims backed
-    by two or more independent tools are promoted to ``supported``. Every
-    state change feeds the learning engine (calibration + claim yield) and
-    surviving findings are ingested into memory.
+    by two or more independent tools are promoted to ``supported``. A verified
+    claim that explicitly settles a hypothesis claim ("settles clm-x",
+    "refutes clm-x") closes it as supported or rejected. Every state change
+    feeds the learning engine (calibration + claim yield) and surviving
+    findings are ingested into memory.
     """
 
     def __init__(self, evidence: EvidenceRepository, episodes: EpisodeRepository,
@@ -121,7 +125,33 @@ class EvidenceService:
                 self._feedback(claim, correct=True)
                 if self._knowledge.ingest_claim(promoted).stored:
                     ingested += 1
-        return ValidationReport(len(claims), tuple(downgraded), tuple(sorted(corroborated)), ingested)
+        settled = self._settle_hypotheses(survivors)
+        return ValidationReport(len(claims), tuple(downgraded), tuple(sorted(corroborated)),
+                                ingested, settled)
+
+    def _settle_hypotheses(self, survivors: list[Claim]) -> tuple[tuple[str, str, str], ...]:
+        """Close open hypothesis claims that a verified claim explicitly settles.
+
+        Only hypotheses still unverified change, so re-running is idempotent. The
+        outcome is a calibration signal for the hypothesis's stated confidence.
+        """
+        open_hypotheses = {c.claim_id: c for c in survivors
+                           if c.kind is ClaimKind.HYPOTHESIS
+                           and c.verification is Verification.UNVERIFIED}
+        settled: list[tuple[str, str, str]] = []
+        for verified in sorted((c for c in survivors if c.kind is ClaimKind.VERIFIED),
+                               key=lambda c: (c.created_at, c.claim_id)):
+            for claim_id, state in sorted(settled_hypotheses(verified).items()):
+                hypothesis = open_hypotheses.pop(claim_id, None)
+                if hypothesis is None:
+                    continue
+                note = f"settled ({state.value}) by verified claim {verified.claim_id}"
+                limitations = f"{hypothesis.limitations} | {note}".strip(" |")
+                self._evidence.save_claim(replace(hypothesis, verification=state,
+                                                  limitations=limitations))
+                self._feedback(hypothesis, correct=state is Verification.SUPPORTED)
+                settled.append((claim_id, state.value, verified.claim_id))
+        return tuple(settled)
 
     def _feedback(self, claim: Claim, correct: bool) -> None:
         """One-time learning signal on a claim's state change (keeps validation idempotent)."""

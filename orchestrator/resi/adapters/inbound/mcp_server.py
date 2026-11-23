@@ -117,7 +117,8 @@ TOOLS: tuple[ToolSpec, ...] = (
              read_only=False),
     ToolSpec("resi_record_claim",
              "Record an evidence claim. kind: observed | tool_derived | hypothesis | verified. "
-             "Non-hypothesis claims must cite a successful execution_id.",
+             "Non-hypothesis claims must cite a successful execution_id. A verified claim "
+             "closes a hypothesis claim by saying so: 'settles clm-...' or 'refutes clm-...'.",
              _obj(["project_id", "artifact_id", "source_hash", "tool_id", "kind", "observation",
                    "confidence"],
                   project_id=S, artifact_id=S, source_hash=S, tool_id=S, execution_id=S,
@@ -127,7 +128,8 @@ TOOLS: tuple[ToolSpec, ...] = (
              lambda c, a: c.evidence.record_claim(_claim(a)), read_only=False),
     ToolSpec("resi_validate_evidence",
              "Run the Evidence Validator: downgrade unsupported claims, promote claims "
-             "corroborated by 2+ tools, feed calibration, ingest findings into memory.",
+             "corroborated by 2+ tools, close hypothesis claims a verified claim explicitly "
+             "settles, feed calibration, ingest findings into memory.",
              _obj(["project_id"], project_id=S),
              lambda c, a: c.evidence.validate(a["project_id"]), read_only=False),
     ToolSpec("resi_security_audit",

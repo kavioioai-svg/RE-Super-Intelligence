@@ -11,6 +11,7 @@ from resi.domain.evidence_rules import (
     corroborated_subjects,
     derive_hypothesis_status,
     experiment_priority,
+    settled_hypotheses,
     validate_claim,
 )
 from resi.domain.geometry import ellipse_perimeter, relative_error_pct
@@ -18,6 +19,7 @@ from resi.domain.learning import (
     ToolStats,
     aggregate,
     calibrate,
+    environment_failure_category,
     extract_lessons,
     score_tool,
     stats_for,
@@ -166,3 +168,115 @@ def test_geometry() -> None:
     assert relative_error_pct(101, 100) == pytest.approx(1.0)
     with pytest.raises(ValueError):
         ellipse_perimeter(0, 1)
+
+
+def at(tool: str, success: bool, when: int, reason: str = "", ctx: str = "macho") -> Episode:
+    """An execution episode at a fixed, orderable time."""
+    return Episode(f"e-{tool}-{when}", tool, ctx, success, 10.0,
+                   f"2026-01-01T00:00:{when:02d}+00:00", reason)
+
+
+PROVIDER = "provider_unavailable: no deep provider usable (ghidra: native decompiler missing)"
+NOT_INSTALLED = "FileNotFoundError: rizin is not installed on this machine"
+
+
+class TestSetupFailures:
+    @pytest.mark.parametrize(("reason", "category"), [
+        (PROVIDER, "provider_unavailable"),
+        (NOT_INSTALLED, "not_installed"),
+        ("executable_missing: hopper launcher", "not_installed"),
+        ("Set REA_IDA_MCP_CONFIG: ida not configured", "not_configured"),
+        ("timeout after 120s", None),
+        ("rejected: target not installed in scope", None),  # guardrail, never setup
+        ("", None),
+    ])
+    def test_classification(self, reason: str, category: str | None) -> None:
+        assert environment_failure_category(reason) == category
+
+    def test_resolved_setup_failures_stop_counting(self) -> None:
+        eps = [at("rea.list_procedures", False, 1, PROVIDER),
+               at("rea.list_procedures", False, 2, PROVIDER),
+               at("rea.list_procedures", True, 3)]
+        stats = aggregate(eps)[("rea.list_procedures", "macho")]
+        assert (stats.successes, stats.failures, stats.resolved_setup_failures) == (1, 0, 2)
+        assert "2 resolved setup failure(s) excluded" in stats.explain()
+
+    def test_unresolved_setup_failures_still_count_and_demote(self) -> None:
+        stats = aggregate([at("cli.rizin", False, i, NOT_INSTALLED) for i in range(6)])
+        rizin = stats[("cli.rizin", "macho")]
+        assert rizin.failures == 6 and rizin.resolved_setup_failures == 0 and rizin.demoted
+
+    def test_setup_failure_after_the_last_success_still_counts(self) -> None:
+        eps = [at("rea.x", True, 1), at("rea.x", False, 2, PROVIDER)]
+        assert aggregate(eps)[("rea.x", "macho")].failures == 1
+
+    def test_genuine_failures_are_never_excused(self) -> None:
+        eps = [at("rea.x", False, 1, "ValueError: bad offset"), at("rea.x", True, 2)]
+        stats = aggregate(eps)[("rea.x", "macho")]
+        assert stats.failures == 1 and stats.resolved_setup_failures == 0
+
+    def test_resolution_spans_artifact_kinds_and_pools(self) -> None:
+        eps = [at("rea.x", False, 1, PROVIDER, ctx="macho"), at("rea.x", True, 2, ctx="elf")]
+        stats = aggregate(eps)
+        assert stats[("rea.x", "macho")].trials == 0
+        assert stats_for(stats, "rea.x", "pe").resolved_setup_failures == 1
+
+    def test_setup_lesson_groups_tools_of_one_server(self) -> None:
+        eps = [at("rea.list_procedures", False, 1, PROVIDER),
+               at("rea.get_objc_classes", False, 2, PROVIDER),
+               at("rea.analyze_swift_types", False, 3, PROVIDER)]
+        lessons = {lesson.key: lesson for lesson in extract_lessons(eps)}
+        lesson = lessons["environment:rea:provider_unavailable"]
+        assert "3 calls to rea tools" in lesson.text and "Fix the setup" in lesson.text
+        assert "(resolved)" not in lesson.title and "environment" in lesson.tags
+
+    def test_setup_lesson_reports_when_fixed(self) -> None:
+        eps = [at(f"rea.t{i}", False, i, PROVIDER) for i in range(3)]
+        eps += [at(f"rea.t{i}", True, 10 + i) for i in range(3)]
+        lesson = extract_lessons(eps)[0]
+        assert lesson.title.endswith("(resolved)") and "setup is fixed" in lesson.text
+
+    def test_partly_fixed_setup_is_not_resolved(self) -> None:
+        eps = [at(f"rea.t{i}", False, i, PROVIDER) for i in range(3)] + [at("rea.t0", True, 9)]
+        assert not extract_lessons(eps)[0].title.endswith("(resolved)")
+
+    def test_two_setup_failures_are_not_yet_a_pattern(self) -> None:
+        eps = [at("rea.a", False, 1, PROVIDER), at("rea.b", False, 2, PROVIDER)]
+        assert extract_lessons(eps) == []
+
+    def test_lessons_are_deterministic(self) -> None:
+        eps = [at(f"cli.t{i}", False, i, NOT_INSTALLED) for i in range(4)]
+        assert extract_lessons(eps) == extract_lessons(list(reversed(eps)))
+
+
+VERIFIED = claim(claim_id="clm-v1", kind=ClaimKind.VERIFIED, reproduction="rebuild and score")
+
+
+class TestHypothesisSettlement:
+    def test_settles_every_id_in_the_sentence(self) -> None:
+        v = replace(VERIFIED, interpretation="Settles hypotheses clm-aa1 and clm-bb2 (main returns 42)")
+        assert settled_hypotheses(v) == {"clm-aa1": Verification.SUPPORTED,
+                                         "clm-bb2": Verification.SUPPORTED}
+
+    def test_refutes_marks_rejected(self) -> None:
+        v = replace(VERIFIED, observation="Byte diff at main refutes clm-aa1.")
+        assert settled_hypotheses(v) == {"clm-aa1": Verification.REJECTED}
+
+    def test_rejection_wins_over_support(self) -> None:
+        v = replace(VERIFIED, observation="Confirms clm-aa1. Contradicts clm-aa1 on the flags.")
+        assert settled_hypotheses(v) == {"clm-aa1": Verification.REJECTED}
+
+    @pytest.mark.parametrize("text", [
+        "Does not contradict clm-aa1.",          # negated
+        "See clm-aa1 for background.",           # bare mention, no settling verb
+        "Confirms the build. Background in clm-aa1.",  # id in another sentence
+        "Settles clm-v1 itself.",                # a claim cannot settle itself
+    ])
+    def test_needs_an_explicit_settling_statement(self, text: str) -> None:
+        assert settled_hypotheses(replace(VERIFIED, interpretation=text)) == {}
+
+    def test_only_verified_claims_settle(self) -> None:
+        observed = claim(interpretation="Settles clm-aa1")
+        downgraded = replace(VERIFIED, interpretation="Settles clm-aa1",
+                             verification=Verification.DOWNGRADED)
+        assert settled_hypotheses(observed) == {} and settled_hypotheses(downgraded) == {}

@@ -6,10 +6,14 @@ Three learners, all pure and deterministic given their inputs:
    Success = the call returned usable output. Utility also rewards claims that
    survived validation and penalises latency. Ranking uses a pessimistic
    lower bound by default (exploit), or seeded Thompson sampling (explore).
+   A setup failure (provider unavailable, tool not installed or not
+   configured) stops counting once the same tool later succeeds: it measured
+   the environment, not the tool. Unresolved setup failures still count.
 2. **Confidence calibration** - compares stated confidence with what the
    validator later confirmed; reports accuracy per level and a Brier score.
-3. **Lesson extraction** - recurring failure patterns become plain-language
-   lessons that are stored in memory and recalled on later engagements.
+3. **Lesson extraction** - recurring failure patterns (timeouts, guardrail
+   rejections, and setup failures grouped across one server's tools) become
+   plain-language lessons that are stored in memory and recalled later.
 """
 
 from __future__ import annotations
@@ -29,6 +33,47 @@ DEMOTION_THRESHOLD = 0.25
 MIN_POINTS_FOR_CALIBRATION = 10
 OVERCONFIDENCE_MARGIN = 0.15
 
+# Setup failures: the tool could not run here, which says nothing about how well it
+# analyses an artifact. Checked in order; the first matching category wins.
+ENVIRONMENT_FAILURE_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("provider_unavailable", ("provider_unavailable", "provider unavailable")),
+    ("not_installed", ("not installed", "filenotfounderror", "executable_missing",
+                       "command not found")),
+    ("not_configured", ("not_configured", "not configured", "not set in")),
+)
+ENVIRONMENT_FAILURE_LABELS = {
+    "provider_unavailable": "no analysis provider was available",
+    "not_installed": "a required program was not installed",
+    "not_configured": "the tool was not configured",
+}
+
+
+def environment_failure_category(reason: str) -> str | None:
+    """The setup-failure category of ``reason``, or None for a genuine tool failure."""
+    lowered = reason.lower()
+    if not lowered or lowered.startswith("rejected"):
+        return None
+    for category, markers in ENVIRONMENT_FAILURE_MARKERS:
+        if any(marker in lowered for marker in markers):
+            return category
+    return None
+
+
+def last_success_by_tool(episodes: Iterable[Episode]) -> dict[str, str]:
+    """Most recent successful execution time per tool, across artifact kinds."""
+    latest: dict[str, str] = {}
+    for ep in episodes:
+        if ep.kind == "execution" and ep.success and ep.recorded_at > latest.get(ep.tool_id, ""):
+            latest[ep.tool_id] = ep.recorded_at
+    return latest
+
+
+def is_resolved_environment_failure(ep: Episode, last_success: dict[str, str]) -> bool:
+    """A setup failure followed by a later success of the same tool: the setup was fixed."""
+    return (ep.kind == "execution" and not ep.success
+            and environment_failure_category(ep.failure_reason) is not None
+            and ep.recorded_at < last_success.get(ep.tool_id, ""))
+
 
 @dataclass(frozen=True, slots=True)
 class ToolStats:
@@ -39,6 +84,7 @@ class ToolStats:
     validated_claims: int = 0
     downgraded_claims: int = 0
     total_latency_ms: float = 0.0
+    resolved_setup_failures: int = 0  # excluded from trials; see is_resolved_environment_failure
 
     @property
     def trials(self) -> int:
@@ -85,23 +131,36 @@ class ToolStats:
         return round(reliability * (0.5 + self.claim_yield) / latency_penalty, 4)
 
     def explain(self) -> str:
-        return (f"{self.successes}/{self.trials} successful, "
+        text = (f"{self.successes}/{self.trials} successful, "
                 f"posterior {self.posterior_mean:.2f}±{self.posterior_sd:.2f}, "
                 f"claim yield {self.claim_yield:.2f}, mean latency {self.mean_latency_ms:.0f} ms")
+        if self.resolved_setup_failures:
+            text += f", {self.resolved_setup_failures} resolved setup failure(s) excluded"
+        return text
 
 
 def aggregate(episodes: Iterable[Episode]) -> dict[tuple[str, str], ToolStats]:
-    """Fold episodes into stats keyed by (tool_id, context)."""
-    acc: dict[tuple[str, str], list[float]] = defaultdict(lambda: [0, 0, 0, 0, 0.0])
-    for ep in episodes:
+    """Fold episodes into stats keyed by (tool_id, context).
+
+    Setup failures that a later success of the same tool resolved are excluded
+    from trials (and counted separately), so fixing the environment restores a
+    tool's standing instead of leaving it penalised forever.
+    """
+    history = list(episodes)
+    last_success = last_success_by_tool(history)
+    acc: dict[tuple[str, str], list[float]] = defaultdict(lambda: [0, 0, 0, 0, 0.0, 0])
+    for ep in history:
         row = acc[(ep.tool_id, ep.context)]
-        if ep.counts_as_trial:
+        if is_resolved_environment_failure(ep, last_success):
+            row[5] += 1
+        elif ep.counts_as_trial:
             row[0 if ep.success else 1] += 1
             row[4] += ep.latency_ms
         row[2] += ep.validated_claims
         row[3] += ep.downgraded_claims
     return {
-        key: ToolStats(key[0], key[1], int(r[0]), int(r[1]), int(r[2]), int(r[3]), float(r[4]))
+        key: ToolStats(key[0], key[1], int(r[0]), int(r[1]), int(r[2]), int(r[3]), float(r[4]),
+                       int(r[5]))
         for key, r in acc.items()
     }
 
@@ -118,6 +177,7 @@ def stats_for(stats: dict[tuple[str, str], ToolStats], tool_id: str, context: st
         sum(s.successes for s in pooled), sum(s.failures for s in pooled),
         sum(s.validated_claims for s in pooled), sum(s.downgraded_claims for s in pooled),
         sum(s.total_latency_ms for s in pooled),
+        sum(s.resolved_setup_failures for s in pooled),
     )
 
 
@@ -189,7 +249,7 @@ def extract_lessons(episodes: Sequence[Episode]) -> list[Lesson]:
     for ep in episodes:
         if ep.kind == "execution":
             by_tool[ep.tool_id].append(ep)
-    lessons: list[Lesson] = []
+    lessons: list[Lesson] = _environment_lessons(episodes)
     for tool_id, eps in sorted(by_tool.items()):
         failures = [e for e in eps if not e.success]
         if len(failures) < MIN_FAILURES_FOR_LESSON:
@@ -214,4 +274,50 @@ def extract_lessons(episodes: Sequence[Episode]) -> list[Lesson]:
                 "alternative.",
                 ("lesson", "guardrail", tool_id),
             ))
+    return lessons
+
+
+SAMPLE_REASON_CHARS = 200
+
+
+def _environment_lessons(episodes: Sequence[Episode]) -> list[Lesson]:
+    """Recurring setup failures, grouped by server and category across that server's tools.
+
+    One unavailable decompiler fails many tools once each; grouping by server
+    (``rea``, ``cli``) sees the pattern that a per-tool count would miss. The
+    lesson says whether the setup has since been fixed (every affected tool
+    succeeded afterwards) so a later run knows to keep, not repeat, the fix.
+    """
+    last_success = last_success_by_tool(episodes)
+    groups: dict[tuple[str, str], list[Episode]] = defaultdict(list)
+    for ep in episodes:
+        if ep.kind != "execution" or ep.success:
+            continue
+        category = environment_failure_category(ep.failure_reason)
+        if category is not None:
+            groups[(ep.tool_id.split(".", 1)[0], category)].append(ep)
+    lessons: list[Lesson] = []
+    for (server, category), failures in sorted(groups.items()):
+        if len(failures) < MIN_FAILURES_FOR_LESSON:
+            continue
+        tools = sorted({e.tool_id for e in failures})
+        kinds = sorted({e.context for e in failures})
+        sample = min(e.failure_reason for e in failures)[:SAMPLE_REASON_CHARS]
+        resolved = all(is_resolved_environment_failure(e, last_success) for e in failures)
+        advice = (
+            "Every affected tool has succeeded since, so the setup is fixed: keep it in place "
+            "on new machines. These failures no longer count against the tools' reliability."
+            if resolved else
+            "Fix the setup named in the example before planning these tools, or plan an "
+            "alternative engine; until a later call succeeds they count as unreliable."
+        )
+        lessons.append(Lesson(
+            f"environment:{server}:{category}",
+            f"{server} tools fail when {ENVIRONMENT_FAILURE_LABELS[category]}"
+            + (" (resolved)" if resolved else ""),
+            f"{len(failures)} calls to {server} tools ({', '.join(tools)}) failed because "
+            f"{ENVIRONMENT_FAILURE_LABELS[category]} (artifact kinds: {', '.join(kinds)}). "
+            f"Example: {sample}. {advice}",
+            ("lesson", "environment", category, server),
+        ))
     return lessons

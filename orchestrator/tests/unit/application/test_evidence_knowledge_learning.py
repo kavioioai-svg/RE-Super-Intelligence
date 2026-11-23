@@ -138,3 +138,57 @@ class TestLearningLoop:
         assert lessons and "Narrow the request" in lessons[0].text
         assert app.learning.refresh_lessons()[0].doc_id == lessons[0].doc_id  # idempotent
         assert app.knowledge.recall("batch_decompile timeout")[0].document.kind == "lesson"
+
+
+class TestSetupRecoveryAndSettlement:
+    def test_fixed_setup_restores_reliability_and_becomes_a_lesson(
+            self, app: App, ctx: dict[str, str]) -> None:
+        provider = RuntimeError("provider_unavailable: no deep provider usable")
+        # read-only tools get two attempts per call: three failed calls, then one success
+        app.transport.script["rea.list_procedures"] = [provider] * 6 + [{"ok": True}]
+        for _ in range(4):
+            app.execution.execute(ctx["pid"], ExecutionRequest("rea.list_procedures", ctx["sha"]),
+                                  ctx["aid"])
+        insight = next(i for i in app.learning.report("elf").tools
+                       if i.tool_id == "rea.list_procedures")
+        assert (insight.trials, insight.posterior_mean) == (1, pytest.approx(2 / 3, abs=1e-3))
+        assert "3 resolved setup failure(s) excluded" in insight.explanation
+        lessons = app.learning.refresh_lessons()
+        setup = [d for d in lessons if "environment" in d.tags]
+        assert setup and "(resolved)" in setup[0].title
+        assert app.learning.refresh_lessons()[0].doc_id == lessons[0].doc_id  # idempotent
+        report = app.reports.render(ctx["pid"])
+        assert "rea.list_procedures failed" not in report.split("## Unresolved questions")[1]
+        assert "| rea.list_procedures | error |" in report  # history is kept
+
+    def test_unfixed_setup_stays_an_open_question(self, app: App, ctx: dict[str, str]) -> None:
+        app.transport.script["rea.batch_decompile"] = [RuntimeError("provider_unavailable: none")]
+        app.execution.execute(ctx["pid"], ExecutionRequest("rea.batch_decompile", ctx["sha"]),
+                              ctx["aid"])
+        report = app.reports.render(ctx["pid"])
+        assert "rea.batch_decompile failed" in report.split("## Unresolved questions")[1]
+
+    def test_verified_claim_settles_hypothesis_claims(self, app: App, ctx: dict[str, str]) -> None:
+        guess = app.evidence.record_claim(claim_input(
+            ctx, kind=ClaimKind.HYPOTHESIS, execution_id=None, observation="main returns 42",
+            subject="main_behaviour"))
+        wrong = app.evidence.record_claim(claim_input(
+            ctx, kind=ClaimKind.HYPOTHESIS, execution_id=None, observation="main returns 41"))
+        unrelated = app.evidence.record_claim(claim_input(
+            ctx, kind=ClaimKind.HYPOTHESIS, execution_id=None, observation="uses AES"))
+        app.evidence.record_claim(claim_input(
+            ctx, kind=ClaimKind.VERIFIED, confidence=Confidence.HIGH, reproduction="rebuild",
+            observation="Rebuild is byte-identical",
+            interpretation=f"Settles {guess.claim_id}; refutes {wrong.claim_id}"))
+        report = app.evidence.validate(ctx["pid"])
+        assert {(h, s) for h, s, _ in report.settled} == {(guess.claim_id, "supported"),
+                                                          (wrong.claim_id, "rejected")}
+        stored = {c.claim_id: c for c in app.store.list_claims(ctx["pid"])}
+        assert stored[guess.claim_id].verification is Verification.SUPPORTED
+        assert stored[wrong.claim_id].verification is Verification.REJECTED
+        assert "settled (supported) by verified claim" in stored[guess.claim_id].limitations
+        assert stored[unrelated.claim_id].verification is Verification.UNVERIFIED
+        assert app.evidence.validate(ctx["pid"]).settled == ()  # idempotent
+        open_part = app.reports.render(ctx["pid"]).split("## Unresolved questions")[1]
+        assert guess.claim_id not in open_part and wrong.claim_id not in open_part
+        assert unrelated.claim_id in open_part

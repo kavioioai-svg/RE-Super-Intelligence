@@ -79,15 +79,21 @@ class ReportService:
                                                             HypothesisStatus.SUPPORTED)]
         downgraded = [c for c in claims if c.verification is Verification.DOWNGRADED]
         untested = [c for c in claims
-                    if c.kind is ClaimKind.HYPOTHESIS and c.verification is not Verification.DOWNGRADED]
+                    if c.kind is ClaimKind.HYPOTHESIS and c.verification is Verification.UNVERIFIED]
+        # A failure stays an open question only until the same tool succeeds in this project.
+        last_ok: dict[str, str] = {}
+        for e in executions:
+            if e.succeeded and e.finished_at > last_ok.get(e.tool_id, ""):
+                last_ok[e.tool_id] = e.finished_at
+        open_failures = [e for e in failures if e.finished_at >= last_ok.get(e.tool_id, "")]
         lines += ["", "## Unresolved questions", ""]
         lines += [f"- {h.statement} ({h.status.value})" for h in open_items]
         lines += [f"- Untested hypothesis {c.claim_id}: {c.interpretation or c.observation}"
                   for c in untested]
         lines += [f"- Downgraded claim {c.claim_id}: {c.limitations}" for c in downgraded]
         lines += [f"- {e.tool_id} failed ({e.execution_id}); results it would provide are missing"
-                  for e in failures]
-        if not (open_items or untested or downgraded or failures):
+                  for e in open_failures]
+        if not (open_items or untested or downgraded or open_failures):
             lines.append("_None._")
         lines += ["", "## Reproduction", ""]
         lines += [f"- {c.claim_id}: {c.reproduction}" for c in claims if c.reproduction] or ["_None._"]
