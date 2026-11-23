@@ -106,6 +106,20 @@ def test_knowledge_filters(store: SqliteStore | InMemoryStore) -> None:
     assert store.list_documents(project_id="p") == []
 
 
+def test_document_updated_at_round_trips(store: SqliteStore | InMemoryStore) -> None:
+    doc = KnowledgeDocument("d1", "lesson", "t", "x", "2026-01-01", source_ref="lesson:k",
+                            updated_at="2026-01-02")
+    store.save_document(doc)
+    assert require(store.find_by_source("lesson:k")).updated_at == "2026-01-02"
+
+
+def test_documents_without_updated_at_fall_back_to_created_at() -> None:
+    from resi.adapters.outbound.serialization import document_from_dict
+    legacy = {"doc_id": "d1", "kind": "lesson", "title": "t", "text": "x",
+              "created_at": "2026-01-01"}
+    assert document_from_dict(legacy).updated_at == "2026-01-01"
+
+
 def test_episodes_and_calibration(store: SqliteStore | InMemoryStore) -> None:
     store.add_episode(Episode("e1", "t1", "elf", True, 5.0, "t"))
     store.add_episode(Episode("e2", "t2", "elf", False, 5.0, "t", "timeout", kind="execution"))

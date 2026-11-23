@@ -62,12 +62,21 @@ class KnowledgeService:
             return RememberResult(None, verdict)
         clean_title, _, clean_text = verdict.text.partition("\n")
         existing = self._repository.find_by_source(source_ref) if source_ref else None
+        if existing is not None and (
+            existing.kind, existing.title, existing.text, existing.project_id, existing.tags,
+            existing.trusted, existing.flags,
+        ) == (kind, clean_title, clean_text, project_id, tuple(tags), verdict.trusted,
+              verdict.flags):
+            return RememberResult(existing, verdict)  # unchanged: keep it, timestamps included
+        now = self._clock.now()
         doc = KnowledgeDocument(
             doc_id=existing.doc_id if existing else self._ids.new("doc"),
-            kind=kind, title=clean_title, text=clean_text, created_at=self._clock.now(),
+            kind=kind, title=clean_title, text=clean_text,
+            created_at=existing.created_at if existing else now,
             project_id=project_id, tags=tuple(tags), source_ref=source_ref,
             trusted=verdict.trusted, flags=verdict.flags,
             vector=self._embedder.embed(verdict.text) if self._embedder else None,
+            updated_at=now,
         )
         self._repository.save_document(doc)
         return RememberResult(doc, verdict)

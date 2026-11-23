@@ -132,6 +132,7 @@ def document_from_dict(d: dict[str, Any]) -> KnowledgeDocument:
         created_at=d["created_at"], project_id=d.get("project_id"), tags=tuple(d.get("tags", ())),
         source_ref=d.get("source_ref", ""), trusted=bool(d.get("trusted", True)),
         flags=tuple(d.get("flags", ())), vector=tuple(vector) if vector else None,
+        updated_at=d.get("updated_at") or d["created_at"],  # older records predate the field
     )
 
 

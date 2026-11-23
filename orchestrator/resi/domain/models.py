@@ -287,6 +287,9 @@ class KnowledgeDocument:
     trusted: bool = True  # False = quarantined (guardrail flagged it)
     flags: tuple[str, ...] = ()
     vector: tuple[float, ...] | None = field(default=None, compare=False)
+    # Last time the content changed. created_at is kept across upserts, so "new"
+    # (created_at) and "new or changed" (updated_at) can be told apart.
+    updated_at: str = ""
 
 
 @dataclass(frozen=True, slots=True)

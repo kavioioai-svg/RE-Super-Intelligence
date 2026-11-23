@@ -123,6 +123,28 @@ class TestMemory:
         assert require(a.document).doc_id == require(b.document).doc_id
         assert len(app.store.list_documents()) == 1
 
+    def test_unchanged_upsert_keeps_timestamps(self, app: App) -> None:
+        first = require(app.knowledge.remember("t", "same", source_ref="lesson:x").document)
+        again = require(app.knowledge.remember("t", "same", source_ref="lesson:x").document)
+        assert again == first and first.updated_at == first.created_at
+        assert require(app.store.find_by_source("lesson:x")).updated_at == first.updated_at
+
+    def test_changed_upsert_keeps_created_and_bumps_updated(self, app: App) -> None:
+        first = require(app.knowledge.remember("t", "v1", source_ref="lesson:x").document)
+        second = require(app.knowledge.remember("t", "v2", source_ref="lesson:x").document)
+        assert second.created_at == first.created_at
+        assert second.updated_at > first.updated_at and second.text == "v2"
+
+    def test_refreshing_unchanged_lessons_does_not_make_them_new(
+            self, app: App, ctx: dict[str, str]) -> None:
+        app.transport.script["rea.batch_decompile"] = [TimeoutError()]
+        for _ in range(3):
+            app.execution.execute(ctx["pid"], ExecutionRequest("rea.batch_decompile", ctx["sha"]),
+                                  ctx["aid"])
+        before = {d.doc_id: (d.created_at, d.updated_at) for d in app.learning.refresh_lessons()}
+        after = {d.doc_id: (d.created_at, d.updated_at) for d in app.learning.refresh_lessons()}
+        assert before and after == before
+
 
 class TestLearningLoop:
     def test_failures_become_lessons_and_demotions(self, app: App, ctx: dict[str, str]) -> None:

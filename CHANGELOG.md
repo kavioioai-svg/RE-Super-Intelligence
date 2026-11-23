@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows [Kee
 - Learning engine: a setup failure (no analysis provider, a program not installed, a tool not configured) stops counting against a tool once that tool succeeds later; it measured the environment, not the tool. Unresolved setup failures still count, so a broken tool is still demoted. Tool explanations show how many resolved setup failures were excluded.
 - Reports list a tool failure under "Unresolved questions" only until the same tool succeeds in the project; the full failure history stays in "Tool failures".
 
+### Fixed
+- Re-storing an unchanged lesson or finding no longer resets its `created_at`, so recurring refreshes stop presenting old lessons as new. Unchanged documents are left untouched; changed ones keep `created_at` and record the change in a new `updated_at` field (older records fall back to `created_at`).
+
 ### Added
 - Lesson extraction groups recurring setup failures across one server's tools (for example every `rea` tool failing because no decompiler provider is available) and says whether the setup has since been fixed.
 - The Evidence Validator closes hypothesis claims that a verified claim explicitly settles: "settles/confirms/supports clm-..." marks them supported and "refutes/rejects/contradicts/falsifies clm-..." marks them rejected (negated statements settle nothing; rejection wins). Each settlement feeds calibration, and `resi_validate_evidence` returns them as `settled`.
